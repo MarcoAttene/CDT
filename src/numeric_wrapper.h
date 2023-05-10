@@ -1,7 +1,7 @@
 #ifndef NUMERIC_WRAPPER
 #define NUMERIC_WRAPPER
 
-#define USE_INDIRECT_PREDS
+//#define USE_INDIRECT_PREDS
 //#define USE_DOUBLE
 //#define USE_LAZY_CORE
 //#define USE_PLAIN_CORE
@@ -55,7 +55,7 @@ typedef CGAL::Lazy_exact_nt< CGAL::Gmpq > coord_t;
 
 
 #ifdef USE_PLAIN_GMPQ
-#include <CGAL/Gmpxx.h>
+#include <CGAL/gmpxx.h>
 typedef mpq_class coord_t;
 #define GET_DOUBLE_VAL(a) (a).get_d()
 #define GET_SIGN(a) (((a)>0) - ((a)<0))
