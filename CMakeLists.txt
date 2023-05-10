@@ -21,6 +21,7 @@ project(cdt)
 # add path to cmake module path
 list(PREPEND CMAKE_MODULE_PATH
     ${CMAKE_CURRENT_LIST_DIR}/cmake/
+	${CMAKE_CURRENT_LIST_DIR}/cmake/find
 )
 
 # specify the C++ standard
