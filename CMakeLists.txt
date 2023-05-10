@@ -3,8 +3,26 @@ cmake_minimum_required(VERSION 3.10)
 # Use CMake -DLGPL=ON if you opt for the LGPL license
 option(LGPL "LGPL" OFF)
 
+# Only one of the following USE options can be ON
+
+# Indirect Predicates (recommended)
+option(USE_INDIRECT_PREDS "USE_INDIRECT_PREDS" ON) 
+
+# These options are only useful for comparisons
+option(USE_DOUBLE "USE_DOUBLE" OFF)
+option(USE_LAZY_CORE "USE_LAZY_CORE" OFF)
+option(USE_PLAIN_CORE "USE_PLAIN_CORE" OFF)
+option(USE_LAZY_GMPQ "USE_LAZY_GMPQ" OFF)
+option(USE_PLAIN_GMPQ "USE_PLAIN_GMPQ" OFF)
+
 # set the project name
 project(cdt)
+
+# add path to cmake module path
+list(PREPEND CMAKE_MODULE_PATH
+    ${CMAKE_CURRENT_LIST_DIR}/cmake/
+	${CMAKE_CURRENT_LIST_DIR}/cmake/find
+)
 
 # specify the C++ standard
 set(CMAKE_CXX_STANDARD 17)
@@ -50,20 +68,34 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 	include
 )
 
-# The following enable compilation and linking against CGAL on my own MSVC
-# CGAL is used only for comparison purposes. It is safe to comment
-# all the lines below this one for use with indirect predicates.
+# Add define for indirect predicates
+if(USE_INDIRECT_PREDS)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE USE_INDIRECT_PREDS)
+endif()
 
-#if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-#	set(GMP_HOME_DIR "D:/SYNC_DATA/Sviluppo_Software/Third_Party/mpir-master/msvc/vs19")
-#	set(GMPC_HOME_DIR ${GMP_HOME_DIR}/lib_mpir_gc/x64/Release)
-#	set(GMPXX_HOME_DIR ${GMP_HOME_DIR}/lib_mpir_cxx/x64/Release)
-#	set(GMP_INCLUDE_DIR ${GMPXX_HOME_DIR})
-#	set(CGAL_DIR "D:/SYNC_DATA/vcpkg/packages/cgal_x64-windows/share/cgal")
-#	set(GMP_LIBRARIES "D:/SYNC_DATA/vcpkg/installed/x64-windows/lib/gmp.lib")
-#	set(MPFR_LIBRARIES "D:/SYNC_DATA/vcpkg/installed/x64-windows/lib/mpfr.lib")
-#	set(MPFR_INCLUDE_DIR "D:/SYNC_DATA/vcpkg/installed/x64-windows/include")
-#	set(Boost_INCLUDE_DIR "D:/SYNC_DATA/vcpkg/installed/x64-windows/include")
-#	find_package(CGAL REQUIRED COMPONENTS Core)
-#	target_link_libraries(${PROJECT_NAME} CGAL::CGAL CGAL::CGAL_Core)
-#endif()
+# Add define for double
+if(USE_DOUBLE)
+target_compile_definitions(${PROJECT_NAME} PRIVATE USE_DOUBLE)
+endif()
+
+# The other number types require to link against CGAL/GMP/MPFR
+if(USE_LAZY_CORE OR USE_PLAIN_CORE OR USE_LAZY_GMPQ OR USE_PLAIN_GMPQ)
+	include(cgal)
+	target_link_libraries(${PROJECT_NAME} CGAL::CGAL CGAL::CGAL_Core)
+
+	if(USE_LAZY_CORE)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE USE_LAZY_CORE)
+	endif()
+
+	if(USE_PLAIN_CORE)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE USE_PLAIN_CORE)
+	endif()
+
+	if(USE_LAZY_GMPQ)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE USE_LAZY_GMPQ)
+	endif()
+
+	if(USE_PLAIN_GMPQ)
+		target_compile_definitions(${PROJECT_NAME} PRIVATE USE_PLAIN_GMPQ)
+	endif()
+endif()
