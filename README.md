@@ -5,7 +5,7 @@ Steiner points are possibly added to make the input admit a CDT.
 ## Usage
 Clone this repository with:
 ```
-git clone https://github.com/...
+git clone https://github.com/MarcoAttene/CDT
 ```
 
 Once done, you may build the executable as follows:
