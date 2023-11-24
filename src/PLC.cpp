@@ -1514,9 +1514,9 @@ bool PLCx::recoverFaceHSi(std::vector<uint64_t>& i_tets, const PLCface& f, bool&
     }
 
     if (!toremove.empty()) {
-        for (uint32_t v : top_vertices) v_orient[v] = UNDET_ORIENTATION;
-        for (uint32_t v : bottom_vertices) v_orient[v] = UNDET_ORIENTATION;
         if (cavity_ok) {
+            for (uint32_t v : top_vertices) v_orient[v] = UNDET_ORIENTATION;
+            for (uint32_t v : bottom_vertices) v_orient[v] = UNDET_ORIENTATION;
             for (uint64_t y : toremove) delmesh.pushAndMarkDeletedTets(y);
             delmesh.removeDelTets();
             return false;
@@ -1528,6 +1528,8 @@ bool PLCx::recoverFaceHSi(std::vector<uint64_t>& i_tets, const PLCface& f, bool&
 //            recoverFaceGiftWrap(i_tets); 
             delmesh.recoverFaceGiftWrap(i_tets, v_orient);
             sisMethodWorks = false;
+            for (uint32_t v : top_vertices) v_orient[v] = UNDET_ORIENTATION;
+            for (uint32_t v : bottom_vertices) v_orient[v] = UNDET_ORIENTATION;
         }
     }
 
