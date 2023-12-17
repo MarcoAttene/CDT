@@ -1067,10 +1067,11 @@ uint32_t TetMesh::findEncroachingPoint(const uint32_t ep0, const uint32_t ep1, u
 
     for (uint64_t j : enc_queue) mark_Tet_1(j);
 
-    const pointType* p0 = vertices[ep0];
-    const pointType* p1 = vertices[ep1];
+    const vector3d p0 = vertices[ep0];
+    const vector3d p1 = vertices[ep1];
+    const double eslen = (p0 - p1).sq_length();
 
-    pointType* ep;
+    vector3d ep;
     uint32_t enc_pt_i = UINT32_MAX;
 
     marked_vertex[ep0] = marked_vertex[ep1] = 1;
@@ -1085,11 +1086,11 @@ uint32_t TetMesh::findEncroachingPoint(const uint32_t ep0, const uint32_t ep1, u
         for (uint32_t i = 0; i < 4; i++) {
             const uint32_t ui = tn[i];
             if (!marked_vertex[ui]) {              
-                const pointType* pui = vertices[ui];
-                if (vector3d::inSmallestSphere(p0, p1, pui)) {
+                const vector3d& pui = vertices[ui];
+                if (((pui - p0).sq_length() + (pui - p1).sq_length()) <= eslen) {
                     marked_vertex[ui] = 1;
                     if (enc_pt_i == UINT32_MAX || vector3d::hasLargerSphere(p0, p1, pui, ep)) {
-                        ep = vertices[(enc_pt_i = ui)];
+                        ep = pui; enc_pt_i = ui;
                         tet_e = tb;
                     }
                 } 
@@ -1097,13 +1098,17 @@ uint32_t TetMesh::findEncroachingPoint(const uint32_t ep0, const uint32_t ep1, u
             }
         }
 
+        const int nvmask[] = { (marked_vertex[tn[0]] == 1), (marked_vertex[tn[1]] == 1), (marked_vertex[tn[2]] == 1), (marked_vertex[tn[3]] == 1) };
+        const int totmarkeda = nvmask[0] + nvmask[1] + nvmask[2] + nvmask[3];
+
         // Expand on adjacent tets if at least one common vertex is insphere
         const uint64_t* tg = tet_neigh.data() + tb;
         for (uint32_t i = 0; i < 4; i++) {
             const uint64_t nc = tg[i];
             const uint64_t n = nc >> 2;
-            if (!is_marked_Tet_1(n) && tet_node[nc] != INFINITE_VERTEX &&
-               (marked_vertex[tn[(i + 1) & 3]] == 1 || marked_vertex[tn[(i + 2) & 3]] == 1 || marked_vertex[tn[(i + 3) & 3]] == 1)) {
+            if (is_marked_Tet_1(n)==2 || tet_node[nc] == INFINITE_VERTEX) continue;
+            const int totmarked = totmarkeda - nvmask[i];
+            if (totmarked) {
                 mark_Tet_1(n);
                 enc_queue.push_back(n);
             }

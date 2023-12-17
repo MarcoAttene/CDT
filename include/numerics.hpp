@@ -37,11 +37,13 @@
 #include <cstring>
 #include <algorithm>
 
+#pragma intrinsic(fabs)
+
 inline void initFPU()
 {
 #ifdef IS64BITPLATFORM
 #ifdef USE_SIMD_INSTRUCTIONS
-	_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+//	_MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
 #endif
 #else
 #ifdef USE_SIMD_INSTRUCTIONS
@@ -57,101 +59,111 @@ inline void initFPU()
 #endif
 }
 
-
 #ifdef USE_SIMD_INSTRUCTIONS
 
-inline __m128d imul_c0(const __m128d a, const __m128d b) {
-	const __m128d llhh = _mm_mul_pd(a, b);
-	const __m128d lhhl = _mm_mul_pd(a, _mm_shuffle_pd(b, b, 1));
-	return _mm_max_pd(_mm_unpacklo_pd(llhh, lhhl), _mm_unpackhi_pd(llhh, lhhl));
-}
-
-inline __m128d imul_c1(const __m128d a, const __m128d b) {
-	return _mm_mul_pd(_mm_shuffle_pd(b, b, 3), _mm_shuffle_pd(a, a, 1));
-}
-
-inline __m128d imul_c2(const __m128d a, const __m128d b) {
-	return _mm_mul_pd(_mm_shuffle_pd(b, b, 0), a);
-}
-
-inline __m128d imul_cx(const __m128d a, const __m128d b) {
-	static double n[] = {NAN, NAN};
-	return _mm_load_pd(n);
-}
-
-inline __m128d imul_c4(const __m128d a, const __m128d b) {
-	return _mm_mul_pd(_mm_shuffle_pd(a, a, 3), _mm_shuffle_pd(b, b, 1));
-}
-
-inline __m128d imul_c5(const __m128d a, const __m128d b) {
-	const __m128d ip = _mm_mul_pd(_mm_castsi128_pd(_mm_xor_si128(_mm_castpd_si128(a), interval_number::sign_high_mask)), b);
-	return _mm_shuffle_pd(ip, ip, 1);
-}
-
-inline __m128d imul_c6(const __m128d a, const __m128d b) {
-	const __m128i ssg = _mm_xor_si128(_mm_castpd_si128(b), interval_number::sign_low_mask);
-	return _mm_mul_pd(a, _mm_shuffle_pd(_mm_castsi128_pd(ssg), _mm_castsi128_pd(ssg), 1));
-}
-
-inline __m128d imul_c8(const __m128d a, const __m128d b) {
-	return _mm_mul_pd(_mm_shuffle_pd(a, a, 0), b);
-}
-
-inline __m128d imul_c9(const __m128d a, const __m128d b) {
-	const __m128i ssg = _mm_xor_si128(_mm_castpd_si128(a), interval_number::sign_low_mask);
-	return _mm_mul_pd(b, _mm_shuffle_pd(_mm_castsi128_pd(ssg), _mm_castsi128_pd(ssg), 1));
-}
-
-inline __m128d imul_c10(const __m128d a, const __m128d b) {
-	return _mm_mul_pd(a, _mm_castsi128_pd(_mm_xor_si128(_mm_castpd_si128(b), interval_number::sign_low_mask)));
-}
-
-inline static __m128d(*imul_map[])(const __m128d a, const __m128d b) =
-{ &imul_c0, &imul_c1, &imul_c2, &imul_cx,
-  &imul_c4, &imul_c5, &imul_c6, &imul_cx,
-  &imul_c8, &imul_c9, &imul_c10, &imul_cx,
-  &imul_cx, &imul_cx, &imul_cx, &imul_cx };
-
+#ifdef USE_AVX2_INSTRUCTIONS
 inline interval_number interval_number::operator*(const interval_number& b) const
 {
-	return interval_number(imul_map[(_mm_movemask_pd(interval) << 2) | _mm_movemask_pd(b.interval)](interval, b.interval));
+	// This version exploits 256bit registers provided by AVX2 architectures
+	// to compute the product using the "naive" eight-multiplications method.
+	// The advantage wrt to the non-avx version is due to the absence of
+	// branches in the execution, which increses the processor's throughput.
+
+	// Fill i1 and i2 with two copies of 'this' and 'b' respectively
+	__m256d i1 = _mm256_castpd128_pd256(interval);
+	i1 = _mm256_insertf128_pd(i1, interval, 1);
+	__m256d i2 = _mm256_castpd128_pd256(b.interval);
+	i2 = _mm256_insertf128_pd(i2, b.interval, 1);
+
+	// Swizzle and change sign appropriately to produce all the eight configs
+	__m256d x2 = _mm256_shuffle_pd(i1, i1, 5);
+	__m256d x3 = _mm256_xor_pd(i2, _mm256_set_pd(-0.0, -0.0, 0.0, 0.0));
+	__m256d x4 = _mm256_xor_pd(i2, _mm256_set_pd(0.0, 0.0, -0.0, -0.0));
+	x3 = _mm256_mul_pd(i1, x3);
+	x2 = _mm256_mul_pd(x2, x4);
+	x3 = _mm256_max_pd(x3, x2);
+	x4 = _mm256_shuffle_pd(x3, x3, 5);
+	x3 = _mm256_max_pd(x3, x4);
+	x3 = _mm256_permute4x64_pd(x3, 72);
+
+	// The first two vals of the 256 vector are the resulting product
+	return _mm256_castpd256_pd128(x3);
+}
+#else
+inline interval_number interval_number::operator*(const interval_number& b) const
+{
+	// <a0,a1> * <b0,b1>
+	__m128d ssg;
+	__m128d llhh, lhhl, ip;
+
+	switch ((_mm_movemask_pd(interval) << 2) | _mm_movemask_pd(b.interval))
+	{
+	case 0: // -+ * -+: <min(<a0*b1>,<a1*b0>), max(<a0*b0>,<a1*b1>)>
+		llhh = _mm_mul_pd(interval, b.interval);
+		lhhl = _mm_mul_pd(interval, _mm_shuffle_pd(b.interval, b.interval, 1));
+		return interval_number(_mm_max_pd(_mm_unpacklo_pd(llhh, lhhl), _mm_unpackhi_pd(llhh, lhhl)));
+	case 1: // -+ * --: <b0*a1, b0*a0>
+		return interval_number(_mm_mul_pd(_mm_shuffle_pd(b.interval, b.interval, 3), _mm_shuffle_pd(interval, interval, 1)));
+	case 2: // -+ * ++: <b1*a0, b1*a1>
+		return interval_number(_mm_mul_pd(_mm_shuffle_pd(b.interval, b.interval, 0), interval));
+	case 4: // -- * -+: <a0*b1, a0*b0>
+		return interval_number(_mm_mul_pd(_mm_shuffle_pd(interval, interval, 3), _mm_shuffle_pd(b.interval, b.interval, 1)));
+	case 5: // -- * --: <a1*b1, a0*b0>
+		ip = _mm_mul_pd(_mm_xor_pd(interval, sign_high_mask()), b.interval);
+		return interval_number(_mm_shuffle_pd(ip, ip, 1));
+	case 6: // -- * ++: <a0*b1, a1*b0>
+		ssg = _mm_xor_pd(b.interval, sign_low_mask());
+		return interval_number(_mm_mul_pd(interval, _mm_shuffle_pd(ssg, ssg, 1)));
+	case 8: // ++ * -+: <a1*b0, a1*b1>
+		return interval_number(_mm_mul_pd(_mm_shuffle_pd(interval, interval, 0), b.interval));
+	case 9: // ++ * --: <b0*a1, b1*a0>
+		ssg = _mm_xor_pd(interval, sign_low_mask());
+		return interval_number(_mm_mul_pd(b.interval, _mm_shuffle_pd(ssg, ssg, 1)));
+	case 10: // ++ * ++: <a0*b0, a1*b1>
+		return interval_number(_mm_mul_pd(interval, _mm_xor_pd(b.interval, sign_low_mask())));
+	}
+
+	return interval_number(NAN);
+}
+#endif
+
+inline interval_number interval_number::operator*(const double b) const {
+	if (b >= 0) return interval_number(_mm_mul_pd(interval, _mm_set1_pd(b)));
+	else return interval_number(_mm_mul_pd(_mm_shuffle_pd(interval, interval, 1), _mm_set1_pd(-b)));
 }
 
+inline interval_number interval_number::operator/(const double b) const {
+	if (b >= 0) return interval_number(_mm_div_pd(interval, _mm_set1_pd(b)));
+	else return interval_number(_mm_div_pd(_mm_shuffle_pd(interval, interval, 1), _mm_set1_pd(-b)));
+}
 
-//inline interval_number interval_number::operator*(const interval_number& b) const
-//{
-//	__m128i ssg;
-//	__m128d llhh, lhhl, ip;
-//	switch ((_mm_movemask_pd(interval) << 2) | _mm_movemask_pd(b.interval))
-//	{
-//	case 0:
-//		llhh = _mm_mul_pd(interval, b.interval);
-//		lhhl = _mm_mul_pd(interval, _mm_shuffle_pd(b.interval, b.interval, 1));
-//		
-//		return interval_number(_mm_max_pd(_mm_unpacklo_pd(llhh, lhhl), _mm_unpackhi_pd(llhh, lhhl)));
-//	case 1:
-//		return interval_number(_mm_mul_pd(_mm_shuffle_pd(b.interval, b.interval, 3), _mm_shuffle_pd(interval, interval, 1)));
-//	case 2:
-//		return interval_number(_mm_mul_pd(_mm_shuffle_pd(b.interval, b.interval, 0), interval));
-//	case 4:
-//		return interval_number(_mm_mul_pd(_mm_shuffle_pd(interval, interval, 3), _mm_shuffle_pd(b.interval, b.interval, 1)));
-//	case 5:
-//		ip = _mm_mul_pd(_mm_castsi128_pd(_mm_xor_si128(_mm_castpd_si128(interval), sign_high_mask)), b.interval);
-//		return interval_number(_mm_shuffle_pd(ip, ip, 1));
-//	case 6:
-//		ssg = _mm_xor_si128(_mm_castpd_si128(b.interval), sign_low_mask);
-//		return interval_number(_mm_mul_pd(interval, _mm_shuffle_pd(_mm_castsi128_pd(ssg), _mm_castsi128_pd(ssg), 1)));
-//	case 8:
-//		return interval_number(_mm_mul_pd(_mm_shuffle_pd(interval, interval, 0), b.interval));
-//	case 9:
-//		ssg = _mm_xor_si128(_mm_castpd_si128(interval), sign_low_mask);
-//		return interval_number(_mm_mul_pd(b.interval, _mm_shuffle_pd(_mm_castsi128_pd(ssg), _mm_castsi128_pd(ssg), 1)));
-//	case 10:
-//		return interval_number(_mm_mul_pd(interval, _mm_castsi128_pd(_mm_xor_si128(_mm_castpd_si128(b.interval), sign_low_mask))));
-//	default:
-//		return interval_number(NAN);
-//	}
-//}
+inline interval_number interval_number::abs() const {
+	switch (_mm_movemask_pd(interval))
+	{
+	case 0: // Hi>0, Lo<0
+		return _mm_and_pd(_mm_max_pd(interval, _mm_shuffle_pd(interval, interval, 1)), all_high_mask());
+	case 1: // Hi<0, Lo<0
+		return _mm_shuffle_pd(interval, interval, 1);
+	}
+	return *this; // If Hi>0, Lo>0 OR invalid interval == case 3 above
+}
+
+inline interval_number interval_number::sqr() const {
+	const interval_number av = abs();
+	return interval_number(_mm_mul_pd(av.getLowSwitched(), av.interval));
+}
+
+inline interval_number min(const interval_number& a, const interval_number& b) {
+	const __m128d ai = a.getLowSwitched(), bi = b.getLowSwitched();
+	const __m128d m = _mm_min_pd(ai, bi);
+	return interval_number(m).getLowSwitched();
+}
+
+inline interval_number max(const interval_number& a, const interval_number& b) {
+	const __m128d ai = a.getLowSwitched(), bi = b.getLowSwitched();
+	const __m128d m = _mm_max_pd(ai, bi);
+	return interval_number(m).getLowSwitched();
+}
 
 inline interval_number interval_number::inverse() const
 {
@@ -159,7 +171,7 @@ inline interval_number interval_number::inverse() const
 	if (m == 1 || m == 2)
 	{
 		const __m128d den = _mm_shuffle_pd(interval, interval, 1);
-		const __m128d frac = _mm_div_pd(minus_one, den);
+		const __m128d frac = _mm_div_pd(minus_one(), den);
 		return interval_number(frac);
 	}
 	else
@@ -168,10 +180,37 @@ inline interval_number interval_number::inverse() const
 	}
 }
 
+inline interval_number interval_number::pow(unsigned int e) const {
+	if (e == 0) return interval_number(1.0);
+
+	__m128d uns = _mm_and_pd(interval, sign_fabs_mask());
+	__m128d ui = interval;
+
+	if (!(e & (unsigned int)1)) { // e is even
+		const int s = _mm_movemask_pd(interval);
+		if (s == 0) {
+			__m128d swapped = _mm_shuffle_pd(uns, uns, 1);
+			if (_mm_comigt_sd(swapped, uns)) {
+				ui = _mm_shuffle_pd(uns, uns, 1);
+				uns = swapped;
+			}
+			uns = _mm_and_pd(uns, all_high_mask());
+		}
+		else if (s == 1) {
+			ui = _mm_shuffle_pd(ui, ui, 1);
+			uns = _mm_shuffle_pd(uns, uns, 1);
+		}
+	}
+
+	while (--e) ui = _mm_mul_pd(ui, uns);
+	return interval_number(ui);
+}
+
 #else
 inline interval_number interval_number::operator*(const interval_number& b) const
 {
-	uint64_t cfg = ((min_low<0) << 3) + ((high<0) << 2) + ((b.min_low<0) << 1) + (b.high<0);
+	casted_double l1(min_low), h1(high), l2(b.min_low), h2(b.high);
+	uint64_t cfg = (l1.is_negative() << 3) + (h1.is_negative() << 2) + (l2.is_negative() << 1) + (h2.is_negative());
 
 	switch (cfg)
 	{
@@ -194,6 +233,31 @@ inline interval_number interval_number::operator*(const interval_number& b) cons
 	return interval_number(NAN);
 }
 
+inline interval_number interval_number::operator*(const double b) const 
+{
+	if (b >= 0) return interval_number(min_low * b, high * b);
+	else return interval_number(high * (-b), min_low * (-b));
+}
+
+inline interval_number interval_number::operator/(const double b) const 
+{
+	if (b >= 0) return interval_number(min_low / b, high / b);
+	else return interval_number(high / (-b), min_low / (-b));
+}
+
+inline interval_number interval_number::abs() const {
+	if (min_low < 0) return *this;
+	if (high < 0) return interval_number(high, min_low);
+	return interval_number(0, std::max(high, min_low));
+}
+
+inline interval_number interval_number::sqr() const {
+	if (min_low < 0) return interval_number(-min_low * min_low, high * high);
+	if (high < 0) return interval_number(-high * high, min_low * min_low);
+	if (min_low < high) return interval_number(0, high * high);
+	return interval_number(0, min_low * min_low);
+}
+
 inline interval_number interval_number::inverse() const
 {
 	if ((min_low < 0 && high>0) || (min_low > 0 && high < 0))
@@ -206,31 +270,126 @@ inline interval_number interval_number::inverse() const
 	}
 }
 
+inline interval_number interval_number::pow(unsigned int e) const {
+
+	const double _uinf = fabs(min_low), _usup = fabs(high);
+
+	if (e & (unsigned int)1) { // If e is odd
+		double _uml = min_low, _uh = high;
+		while (--e) { _uml *= _uinf; _uh *= _usup; }
+		return interval_number(_uml, _uh);
+	}
+	else { // e is even
+		if (e == 0) return interval_number(1.0);
+
+		if (_uinf > _usup) {
+			double _uml = (min_low > 0 && high > 0) ? 0 : (-_usup);
+			double _uh = _uinf;
+			while (--e) { _uml *= _usup; _uh *= _uinf; }
+			return interval_number(_uml, _uh);
+		}
+		else {
+			double _uml = (min_low > 0 && high > 0) ? 0 : (-_uinf);
+			double _uh = _usup;
+			while (--e) { _uml *= _uinf; _uh *= _usup; }
+			return interval_number(_uml, _uh);
+		}
+	}
+}
+
 #endif // USE_SIMD_INSTRUCTIONS
+
+#ifdef USE_AVX2_INSTRUCTIONS
+inline void vfast_Two_Sum(__m128d a, __m128d b, __m128d& x, __m128d& y) {
+	x = _mm_add_sd(a, b);
+	y = _mm_sub_sd(b, _mm_sub_sd(x, a));
+}
+
+inline void vtwo_Sum(__m128d a, __m128d b, __m128d& x, __m128d& y) {
+	x = _mm_add_sd(a, b);
+	__m128d vbv = _mm_sub_sd(x, a);
+	y = _mm_add_sd(_mm_sub_sd(a, _mm_sub_sd(x, vbv)), _mm_sub_sd(b, vbv));
+}
+
+inline void vtwo_Prod(__m128d a, __m128d b, __m128d& x, __m128d& y) {
+	x = _mm_mul_sd(a, b);
+	y = _mm_fmsub_sd(a, b, x);
+}
+#endif
+
 inline void expansionObject::Two_Prod(const double a, const double b, double& x, double& y)
 {
+#ifdef USE_AVX2_INSTRUCTIONS
+	__m128d x1, x2, x3;
+	x1 = _mm_set_sd(a);
+	x2 = _mm_set_sd(b);
+	vtwo_Prod(x1, x2, x3, x2);
+	x = _mm_cvtsd_f64(x3);
+	y = _mm_cvtsd_f64(x2);
+#else
+	double _ah, _al, _bh, _bl;
 	x = a * b;
 	Split(a, _ah, _al); Split(b, _bh, _bl);
 	y = ((_ah * _bh - x) + _ah * _bl + _al * _bh) + _al * _bl;
+#endif
 }
 
 inline void expansionObject::Square(const double a, double& x, double& y)
 {
+#ifdef USE_AVX2_INSTRUCTIONS
+	__m128d x1, x2, x3;
+	x1 = _mm_set_sd(a);
+	vtwo_Prod(x1, x1, x3, x2);
+	x = _mm_cvtsd_f64(x3);
+	y = _mm_cvtsd_f64(x2);
+#else
+	double _ah, _al;
 	x = a * a;
 	Split(a, _ah, _al);
 	y = (_al * _al) - ((x - (_ah * _ah)) - ((_ah + _ah) * _al));
+#endif
 }
 
 inline void expansionObject::Two_One_Prod(const double a1, const double a0, const double b, double& x3, double& x2, double& x1, double& x0)
 {
+#ifdef USE_AVX2_INSTRUCTIONS
+	double _i, _j, _k, _0;
+	Two_Prod(a0, b, _i, x0); Two_Prod(a1, b, _j, _0);
+	Two_Sum(_i, _0, _k, x1); Quick_Two_Sum(_j, _k, x3, x2);
+#else
+	double _bh, _bl, _i, _j, _0, _k;
 	Split(b, _bh, _bl);
 	Two_Prod_PreSplit(a0, b, _bh, _bl, _i, x0); Two_Prod_PreSplit(a1, b, _bh, _bl, _j, _0);
 	Two_Sum(_i, _0, _k, x1); Quick_Two_Sum(_j, _k, x3, x2);
+#endif
 }
 
 inline void expansionObject::Two_Two_Prod(const double a1, const double a0, const double b1, const double b0, double* h)
 {
-	double _ch, _cl, _m, _n;
+#ifdef USE_AVX2_INSTRUCTIONS
+	double _m, _n, _i, _j, _k, _0, _1, _2, _l;
+	Two_Prod(a0, b0, _i, h[0]);
+	Two_Prod(a1, b0, _j, _0);
+	Two_Sum(_i, _0, _k, _1);
+	Quick_Two_Sum(_j, _k, _l, _2);
+	Two_Prod(a0, b1, _i, _0);
+	Two_Sum(_1, _0, _k, h[1]);
+	Two_Sum(_2, _k, _j, _1);
+	Two_Sum(_l, _j, _m, _2);
+	Two_Prod(a1, b1, _j, _0);
+	Two_Sum(_i, _0, _n, _0);
+	Two_Sum(_1, _0, _i, h[2]);
+	Two_Sum(_2, _i, _k, _1);
+	Two_Sum(_m, _k, _l, _2);
+	Two_Sum(_j, _n, _k, _0);
+	Two_Sum(_1, _0, _j, h[3]);
+	Two_Sum(_2, _j, _i, _1);
+	Two_Sum(_l, _i, _m, _2);
+	Two_Sum(_1, _k, _i, h[4]);
+	Two_Sum(_2, _i, _k, h[5]);
+	Two_Sum(_m, _k, h[7], h[6]);
+#else
+	double _ah, _al, _bh, _bl, _ch, _cl, _m, _n, _i, _j, _0, _1, _2, _k, _l;
 	Split(a0, _ah, _al);
 	Split(b0, _bh, _bl);
 	Two_Product_2Presplit(a0, _ah, _al, b0, _bh, _bl, _i, h[0]);
@@ -255,43 +414,87 @@ inline void expansionObject::Two_Two_Prod(const double a1, const double a0, cons
 	Two_Sum(_1, _k, _i, h[4]);
 	Two_Sum(_2, _i, _k, h[5]);
 	Two_Sum(_m, _k, h[7], h[6]);
+#endif
 }
 
-inline int expansionObject::Gen_Sum(const int elen, const double *e, const int flen, const double *f, double *h)
+inline int expansionObject::Gen_Sum(const int elen, const double* e, const int flen, const double* f, double* h)
 {
-	double Q, Qn, hh, en = e[0], fn = f[0];
-	int e_k, f_k, h_k;
+	double Q, Qn, hh, s;
+	const double* en = e, *fn = f, *elast = e+elen, *flast = f+flen;
+	int h_k = 0;
 
-	h_k = e_k = f_k = 0;
-	if ((fn > en) == (fn > -en)) { Q = en; e_k++; } else { Q = fn; f_k++; }
+	Q = (fabs(*fn) > fabs(*en)) ? (*en++) : (*fn++);
 
-	if ((e_k < elen) && (f_k < flen))
+	if ((en < elast) && (fn < flast))
 	{
-		en = e[e_k]; fn = f[f_k];
-		if ((fn > en) == (fn > -en)) { Quick_Two_Sum(en, Q, Qn, hh); e_k++; } else { Quick_Two_Sum(fn, Q, Qn, hh); f_k++; }
+		s = (fabs(*fn) > fabs(*en)) ? (*en++) : (*fn++);
+		Quick_Two_Sum(s, Q, Qn, hh);
 		Q = Qn;
 		if (hh != 0.0) h[h_k++] = hh;
-		while ((e_k < elen) && (f_k < flen))
+		while ((en < elast) && (fn < flast))
 		{
-			en = e[e_k]; fn = f[f_k];
-			if ((fn > en) == (fn > -en)) { Two_Sum(Q, en, Qn, hh); e_k++; } else { Two_Sum(Q, fn, Qn, hh); f_k++; }
+			s = (fabs(*fn) > fabs(*en)) ? (*en++) : (*fn++);
+			Two_Sum(s, Q, Qn, hh);
 			Q = Qn;
 			if (hh != 0.0) h[h_k++] = hh;
 		}
 	}
 
-	while (e_k < elen)
+	while (en < elast)
 	{
-		en = e[e_k++];
-		Two_Sum(Q, en, Qn, hh);
+		Two_Sum(Q, (*en), Qn, hh);
 		Q = Qn;
 		if (hh != 0.0) h[h_k++] = hh;
+		en++;
 	}
 
-	while (f_k < flen)
+	while (fn < flast)
 	{
-		fn = f[f_k++];
-		Two_Sum(Q, fn, Qn, hh);
+		Two_Sum(Q, (*fn), Qn, hh);
+		Q = Qn;
+		if (hh != 0.0) h[h_k++] = hh;
+		fn++;
+	}
+	if ((Q != 0.0) || (h_k == 0)) h[h_k++] = Q;
+
+	return h_k;
+}
+
+inline int expansionObject::Gen_Diff(const int elen, const double* e, const int flen, const double* f, double* h)
+{
+	double Q, Qn, hh, s;
+	const double* en = e, * fn = f, * elast = e + elen, * flast = f + flen;
+	int h_k = 0;
+
+	Q = (fabs(*fn) > fabs(*en)) ? (*en++) : (-*fn++);
+
+	if ((en < elast) && (fn < flast))
+	{
+		s = (fabs(*fn) > fabs(*en)) ? (*en++) : (-*fn++);
+		Quick_Two_Sum(s, Q, Qn, hh);
+		Q = Qn;
+		if (hh != 0.0) h[h_k++] = hh;
+		while ((en < elast) && (fn < flast))
+		{
+			s = (fabs(*fn) > fabs(*en)) ? (*en++) : (-*fn++);
+			Two_Sum(s, Q, Qn, hh);
+			Q = Qn;
+			if (hh != 0.0) h[h_k++] = hh;
+		}
+	}
+
+	while (en < elast)
+	{
+		Two_Sum(Q, (*en), Qn, hh);
+		Q = Qn;
+		if (hh != 0.0) h[h_k++] = hh;
+		en++;
+	}
+
+	while (fn < flast)
+	{
+		s = *fn++;
+		Two_Diff(Q, s, Qn, hh);
 		Q = Qn;
 		if (hh != 0.0) h[h_k++] = hh;
 	}
@@ -300,77 +503,31 @@ inline int expansionObject::Gen_Sum(const int elen, const double *e, const int f
 	return h_k;
 }
 
-inline int expansionObject::Gen_Diff(const int elen, const double *e, const int flen, const double *f, double *h)
+
+inline int expansionObject::Gen_Scale(const int elen, const double* e, const double b, double* h)
 {
-	double Q, Qn, hh, en = e[0], fn = -f[0];
-	int e_k, f_k, h_k;
+	double Q, sum, hh, pr1, pr0;
+	const double* ei = e, * elast = e + elen;
 
-	h_k = e_k = f_k = 0;
-	if ((fn > en) == (fn > -en)) { Q = en; e_k++; } else { Q = fn; f_k++; }
+	int k = 0;
+	Two_Prod(*ei, b, Q, hh);
+	if (hh != 0) h[k++] = hh;
 
-	if ((e_k < elen) && (f_k < flen))
-	{
-		en = e[e_k]; fn = -f[f_k];
-		if ((fn > en) == (fn > -en)) { Quick_Two_Sum(en, Q, Qn, hh); e_k++; } else { Quick_Two_Sum(fn, Q, Qn, hh); f_k++; }
-		Q = Qn;
-		if (hh != 0.0) h[h_k++] = hh;
-		while ((e_k < elen) && (f_k < flen))
-		{
-			en = e[e_k]; fn = -f[f_k];
-			if ((fn > en) == (fn > -en)) { Two_Sum(Q, en, Qn, hh); e_k++; } else { Two_Sum(Q, fn, Qn, hh); f_k++; }
-			Q = Qn;
-			if (hh != 0.0) h[h_k++] = hh;
-		}
-	}
-
-	while (e_k < elen)
-	{
-		en = e[e_k++];
-		Two_Sum(Q, en, Qn, hh);
-		Q = Qn;
-		if (hh != 0.0) h[h_k++] = hh;
-	}
-
-	while (f_k < flen)
-	{
-		fn = -f[f_k++];
-		Two_Sum(Q, fn, Qn, hh);
-		Q = Qn;
-		if (hh != 0.0) h[h_k++] = hh;
-	}
-	if ((Q != 0.0) || (h_k == 0)) h[h_k++] = Q;
-
-	return h_k;
-}
-
-
-inline int expansionObject::Gen_Scale(const int elen, const double *e, const double& b, double *h)
-{
-	double Q, sum, hh, pr1, pr0, enow;
-	int e_k, h_k;
-
-	Split(b, _bh, _bl);
-	Two_Prod_PreSplit(e[0], b, _bh, _bl, Q, hh);
-	h_k = 0;
-	if (hh != 0) h[h_k++] = hh;
-
-	for (e_k = 1; e_k < elen; e_k++)
-	{
-		enow = e[e_k];
-		Two_Prod_PreSplit(enow, b, _bh, _bl, pr1, pr0);
+	while (++ei < elast) {
+		Two_Prod(*ei, b, pr1, pr0);
 		Two_Sum(Q, pr0, sum, hh);
-		if (hh != 0) h[h_k++] = hh;
+		if (hh != 0) h[k++] = hh;
 		Quick_Two_Sum(pr1, sum, Q, hh);
-		if (hh != 0) h[h_k++] = hh;
+		if (hh != 0) h[k++] = hh;
 	}
-	if ((Q != 0.0) || (h_k == 0)) h[h_k++] = Q;
-
-	return h_k;
+	if ((Q != 0.0) || (k == 0)) h[k++] = Q;
+	return k;
 }
 
 
 inline void expansionObject::Two_Square(const double& a1, const double& a0, double *x)
 {
+	double _j, _0, _k, _1, _l, _2;
 	Square(a0, _j, x[0]);
 	_0 = a0 + a0;
 	Two_Prod(a1, _0, _k, _1);
@@ -432,7 +589,6 @@ inline int expansionObject::Double_With_PreAlloc(const int elen, const double* e
 {
 	int newlen = elen;
 	if (hlen < newlen) *h = AllocDoubles(newlen);
-	//if (hlen < newlen) printf("REALLOC %d bytes\n", newlen);
 	Double(elen, e, *h);
 	return newlen;
 }

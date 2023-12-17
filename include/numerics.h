@@ -66,12 +66,17 @@ inline void ip_error(const char* msg)
 #define	ISVISUALSTUDIO
 #endif
 
-// 64-bit
+#ifdef ISVISUALSTUDIO
+
 #ifdef IS64BITPLATFORM
+#ifdef __SSE2__
 #define USE_SIMD_INSTRUCTIONS
 #endif
-
-#ifdef ISVISUALSTUDIO
+#ifdef __AVX2__
+#define USE_SIMD_INSTRUCTIONS
+#define USE_AVX2_INSTRUCTIONS
+#endif
+#endif
 
 #pragma fenv_access (on)
 
@@ -86,6 +91,16 @@ inline void setFPUModeToRoundUP() { fesetround(FE_UPWARD); }
 inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 #endif
 
+#ifdef USE_SIMD_INSTRUCTIONS
+
+#ifdef USE_AVX2_INSTRUCTIONS
+#include <immintrin.h>
+#else
+#include <emmintrin.h>
+#endif
+
+#endif
+
 	/////////////////////////////////////////////////////////////////////
 	// 	   
 	// 	   I N T E R V A L   A R I T H M E T I C
@@ -93,27 +108,22 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 	/////////////////////////////////////////////////////////////////////
 
 	// An interval_number is a pair of doubles representing an interval.
-
-#ifdef USE_SIMD_INSTRUCTIONS
-#include <emmintrin.h>
-#endif
+	// Operations on interval_number require that the rounding mode is
+	// set to +INFINITY. Use setFPUModeToRoundUP().
 
 	class interval_number
 	{
 #ifdef USE_SIMD_INSTRUCTIONS
 		__m128d interval; // interval[1] = min_low, interval[0] = high
 
-	public:
-		static constexpr __m128d zero = { 0, 0 };
-		static constexpr __m128d minus_one = { -1, -1 };
+		static inline __m128d zero() { return _mm_setzero_pd(); }
+		static inline __m128d minus_one() { return _mm_set1_pd(-1.0); }
+		static inline __m128d sign_low_mask() { return _mm_castsi128_pd(_mm_set_epi64x(LLONG_MIN, 0)); }
+		static inline __m128d sign_high_mask() { return _mm_castsi128_pd(_mm_set_epi64x(0, LLONG_MIN)); }
+		static inline __m128d sign_fabs_mask() { return _mm_castsi128_pd(_mm_set_epi64x(~LLONG_MIN, ~LLONG_MIN)); }
+		static inline __m128d all_high_mask() { return _mm_castsi128_pd(_mm_set_epi64x(0, -1LL)); }
 
-#if defined(__clang__) || defined(__GNUC__) || defined(__GNUG__)
-		static constexpr __m128i sign_low_mask = { 0, LLONG_MIN };
-		static constexpr __m128i sign_high_mask = { LLONG_MIN, 0 };
-#elif defined(_MSC_VER)
-		static constexpr __m128i sign_low_mask = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -128 };
-		static constexpr __m128i sign_high_mask = { 0, 0, 0, 0, 0, 0, 0, -128, 0, 0, 0, 0, 0, 0, 0, 0 };
-#endif
+		__m128d getLowSwitched() const { return _mm_xor_pd(interval, sign_low_mask()); }
 
 	public:
 		const double *getInterval() const { return (const double*)&interval; }
@@ -124,8 +134,9 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 		interval_number(const __m128d& i) : interval(i) {}
 		interval_number(const interval_number& b) : interval(b.interval) {}
 
-		double inf() const { return -((double*)(&interval))[1]; }
-		double sup() const { return ((double*)(&interval))[0]; }
+		double minus_inf() const { return _mm_cvtsd_f64(_mm_shuffle_pd(interval, interval, 1));	}
+		double inf() const { return -minus_inf(); }
+		double sup() const { return _mm_cvtsd_f64(interval); }
 
 		interval_number& operator=(const interval_number& b) { interval = b.interval; return *this; }
 
@@ -135,14 +146,67 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 
 		interval_number operator*(const interval_number& b) const;
 
-		bool operator<(const double b) const { return (_mm_comilt_sd(interval, _mm_set_sd(b))); }
+		interval_number operator-() const { return interval_number(_mm_shuffle_pd(interval, interval, 1)); }
+		interval_number operator+(const double b) const { return interval_number(_mm_add_pd(interval, _mm_set_pd(-b, b))); }
+		interval_number operator-(const double b) const { return interval_number(_mm_sub_pd(interval, _mm_set_pd(-b, b))); }
+		interval_number operator*(const double b) const;
+		interval_number operator/(const double b) const;
+		interval_number& operator+=(const interval_number& b) { return operator=(*this + b); }
+		interval_number& operator-=(const interval_number& b) { return operator=(*this - b); }
+		interval_number& operator*=(const interval_number& b) { return operator=(*this * b); }
+		interval_number& operator+=(const double b) { return operator=(*this + b); }
+		interval_number& operator-=(const double b) { return operator=(*this - b); }
+		interval_number& operator*=(const double b) { return operator=(*this * b); }
+		interval_number& operator/=(const double b) { return operator=(*this / b); }
 
-		void invert() { interval = _mm_shuffle_pd(interval, interval, 1); }
+		interval_number abs() const;
 
-		bool isNegative() const { return _mm_comilt_sd(interval, zero); }
-		bool isPositive() const { return _mm_comilt_sd(_mm_shuffle_pd(interval, interval, 1), zero); }
+		interval_number sqr() const;
+
+		interval_number pow(unsigned int e) const;
+
+		friend inline interval_number min(const interval_number& a, const interval_number& b);
+		friend inline interval_number max(const interval_number& a, const interval_number& b);
+
+		bool operator<(const double b) const { return sup() < b; }
+		bool operator<=(const double b) const { return sup() <= b; }
+		bool operator>(const double b) const { return inf() > b; }
+		bool operator>=(const double b) const { return inf() >= b; }
+		bool operator==(const double b) const { return sup()==inf() && sup()==b; }
+
+		void negate() { interval = _mm_shuffle_pd(interval, interval, 1); }
+
+		bool isNegative() const { return _mm_comilt_sd(interval, zero()); }
+		bool isPositive() const { return _mm_comilt_sd(_mm_shuffle_pd(interval, interval, 1), zero()); }
+
+#ifdef USE_AVX2_INSTRUCTIONS
+		int sign() const {
+			__m128d m = _mm_cmplt_sd(interval, zero());
+			__m128i r = _mm_castpd_si128(_mm_blendv_pd(_mm_castsi128_pd(_mm_set1_epi32(1)), _mm_castsi128_pd(_mm_set1_epi32(-1)), m));
+			return _mm_cvtsi128_si32(r);
+		} // Zero is not accounted for
+
+		//int sign() const {
+		//	__m128d mp = _mm_cmplt_sd(_mm_shuffle_pd(interval, interval, 1), zero());
+		//	__m128d rp = _mm_blendv_pd(zero(), _mm_castsi128_pd(_mm_set1_epi32(1)), mp);
+		//	__m128d m = _mm_cmplt_sd(interval, zero());
+		//	__m128i r = _mm_castpd_si128(_mm_blendv_pd(rp, _mm_castsi128_pd(_mm_set1_epi32(-1)), m));
+		//	return _mm_cvtsi128_si32(r);
+		//} // Zero is accounted for
+#else
+		int sign() const { return (isNegative()) ? (-1) : (1); } // Zero is not accounted for
+#endif
 
 #else // USE_SIMD_INSTRUCTIONS
+		typedef union error_approx_type_t
+		{
+			double d;
+			uint64_t u;
+
+			inline error_approx_type_t() {}
+			inline error_approx_type_t(double a) : d(a) {}
+			inline uint64_t is_negative() const { return u >> 63; }
+		} casted_double;
 
 	public:
 		double min_low, high;
@@ -159,7 +223,7 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 
 		bool isNegative() const { return (high < 0); }
 		bool isPositive() const { return (min_low < 0); }
-		void invert() { double tmp = min_low; min_low = high; high = tmp; }
+		void negate() { std::swap(min_low, high); }
 
 		bool operator<(const double b) const { return (high < b); }
 
@@ -171,19 +235,51 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 
 		interval_number operator*(const interval_number& b) const;
 
+		interval_number operator-() const { return interval_number(high, min_low); }
+		interval_number operator+(const double b) const { return interval_number(min_low - b, high + b); }
+		interval_number operator-(const double b) const { return interval_number(min_low + b, high - b); }
+		interval_number operator*(const double b) const;
+		interval_number operator/(const double b) const;
+
+		interval_number& operator+=(const interval_number& b) { min_low += b.min_low; high += b.high; return *this; }
+		interval_number& operator-=(const interval_number& b) { return operator=(*this - b); }
+		interval_number& operator*=(const interval_number& b) { return operator=(*this * b); }
+		interval_number& operator+=(const double b) { min_low -= b; high += b; return *this; }
+		interval_number& operator-=(const double b) { min_low += b; high -= b; return *this; }
+		interval_number& operator*=(const double b) { return operator=(*this * b); }
+		interval_number& operator/=(const double b) { return operator=(*this / b); }
+
+		interval_number abs() const;
+
+		interval_number sqr() const;
+
+		interval_number pow(unsigned int e) const;
+
+		friend inline interval_number min(const interval_number& a, const interval_number& b) {
+			return interval_number(std::max(a.min_low, b.min_low), std::min(a.high, b.high));
+		}
+
+		friend inline interval_number max(const interval_number& a, const interval_number& b) {
+			return interval_number(std::min(a.min_low, b.min_low), std::max(a.high, b.high));
+		}
+
+		bool operator>(const double b) const { return (min_low < -b); }
+		bool operator==(const double b) const { return (high == b && min_low == -b); }
+
+		int sign() const { return (isNegative()) ? (-1) : (1); } // Zero is not accounted for
+
 #endif // USE_SIMD_INSTRUCTIONS
 		double width() const { return sup() - inf(); }
 
 		bool signIsReliable() const { return (isNegative() || isPositive()); } // Zero is not accounted for
-
-		int sign() const { return (isNegative()) ? (-1) : (1); } // Zero is not accounted for
+		bool containsZero() const { return !signIsReliable(); }
 
 		bool isNAN() const { return sup() != sup(); }
 
 		inline double getMid() const { return (inf() + sup()) / 2; }
 		inline bool isExact() const { return inf() == sup(); }
 
-		inline void operator+=(const interval_number& b) { *this = operator+(b); }
+		//inline void operator+=(const interval_number& b) { *this = operator+(b); }
 
 		// Can be TRUE only if the intervals are disjoint
 		inline bool operator<(const interval_number& b) const { return (sup() < b.inf()); }
@@ -202,6 +298,7 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 		// The inverse of an interval. Returns NAN if the interval contains zero
 		interval_number inverse() const;
 	};
+
 
 	// The square root of an interval
 	// Returns NAN if the interval contains a negative value
@@ -229,25 +326,6 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 	// 
 	/////////////////////////////////////////////////////////////////////
 
-	// The following macros are fast implementations of basic expansion arithmetic due
-	// to Dekker, Knuth, Priest, Shewchuk, and others.
-
-	// See Y. Hida, X. S. Li,  D. H. Bailey "Algorithms for Quad-Double Precision Floating Point Arithmetic"
-
-	// Sums
-	#define Quick_Two_Sum(a, b, x, y) x = a + b; y = b - (x - a)
-	#define Two_Sum(a, b, x, y) x = a + b; _bv = x - a; y = (a - (x - _bv)) + (b - _bv)
-	#define Two_One_Sum(a1, a0, b, x2, x1, x0) Two_Sum(a0, b , _i, x0); Two_Sum(a1, _i, x2, x1)
-
-	// Differences
-	#define Two_Diff(a, b, x, y) x = a - b; _bv = a - x; y = (a - (x + _bv)) + (_bv - b)
-	#define Two_One_Diff(a1, a0, b, x2, x1, x0) Two_Diff(a0, b , _i, x0); Two_Sum( a1, _i, x2, x1)
-
-	// Products
-	#define Split(a, _ah, _al) _c = 1.3421772800000003e+008 * a; _ah = _c - (_c - a); _al = a - _ah
-	#define Two_Prod_PreSplit(a, b, _bh, _bl, x, y) x = a * b; Split(a, _ah, _al); y = (_al * _bl) - (((x - (_ah * _bh)) - (_al * _bh)) - (_ah * _bl))
-	#define Two_Product_2Presplit(a, _ah, _al, b, _bh, _bl, x, y) x = a * b; y = (_al * _bl) - (((x - _ah * _bh) - (_al * _bh)) - (_ah * _bl))
-
 	// Allocate extra-memory
 	//#define AllocDoubles(n) ((double *)malloc((n) * sizeof(double)))
 	//#define FreeDoubles(p) (free(p))
@@ -257,15 +335,53 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 	// An instance of the following must be created to access functions for expansion arithmetic
 	class expansionObject
 	{
-		// Temporary vars used in low-level arithmetic
-		inline static double _bv, _c, _ah, _al, _bh, _bl, _i, _j, _k, _l, _0, _1, _2, _u3;
-
 	public:
-		inline static MultiPool mempool = MultiPool(1024, 64);
+		inline static thread_local MultiPool mempool = MultiPool(2048, 64);
+
+		static void Quick_Two_Sum(const double a, const double b, double& x, double& y) { x = a + b; y = b - (x - a); }
+
+		static void Two_Sum(const double a, const double b, double& x, double& y) {
+			double _bv;
+			x = a + b; _bv = x - a; y = (a - (x - _bv)) + (b - _bv); 
+		}
+
+		static void Two_One_Sum(const double a1, const double a0, const double b, double& x2, double& x1, double& x0) {
+			double _i;
+			Two_Sum(a0, b, _i, x0); Two_Sum(a1, _i, x2, x1);
+		}
 
 		static void two_Sum(const double a, const double b, double* xy) { Two_Sum(a, b, xy[1], xy[0]); }
 
+		static void Two_Diff(const double a, const double b, double& x, double& y) {
+			double _bv;
+			x = a - b; _bv = a - x; y = (a - (x + _bv)) + (_bv - b); 
+		}
+
+		static void Two_One_Diff(const double a1, const double a0, const double b, double& x2, double& x1, double& x0) {
+			double _i;
+			Two_Diff(a0, b, _i, x0); Two_Sum(a1, _i, x2, x1);
+		}
+
 		static void two_Diff(const double a, const double b, double* xy) { Two_Diff(a, b, xy[1], xy[0]); }
+
+		// Products
+#ifndef USE_AVX2_INSTRUCTIONS 
+		static void Split(double a, double& _ah, double& _al) {
+			double _c = 1.3421772800000003e+008 * a;
+			_ah = _c - (_c - a); _al = a - _ah;
+		}
+			
+		static void Two_Prod_PreSplit(double a, double b, double _bh, double _bl, double& x, double& y) {
+			double _ah, _al;
+			x = a * b; 
+			Split(a, _ah, _al); 
+			y = (_al * _bl) - (((x - (_ah * _bh)) - (_al * _bh)) - (_ah * _bl));
+		}
+		
+		static void Two_Product_2Presplit(double a, double _ah, double _al, double b, double _bh, double _bl, double& x, double& y) {
+			x = a * b; y = (_al * _bl) - (((x - _ah * _bh) - (_al * _bh)) - (_ah * _bl));
+		}
+#endif
 
 		// [x,y] = [a]*[b]		 Multiplies two expansions [a] and [b] of length one
 		static void Two_Prod(const double a, const double b, double& x, double& y);
@@ -287,19 +403,27 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 		static void Two_One_Prod(const double* a, const double b, double* x) { Two_One_Prod(a[1], a[0], b, x[3], x[2], x[1], x[0]); }
 
 		// [x3,x2,x1,x0] = [a1,a0]+[b1,b0]		Calculates the sum of two expansions of length two
-		static void Two_Two_Sum(const double a1, const double a0, const double b1, const double b0, double& x3, double& x2, double& x1, double& x0)
-		 { Two_One_Sum(a1, a0, b0, _j, _0, x0); Two_One_Sum(_j, _0, b1, x3, x2, x1);	}
+		static void Two_Two_Sum(const double a1, const double a0, const double b1, const double b0, double& x3, double& x2, double& x1, double& x0) {
+			double _j, _0;
+			Two_One_Sum(a1, a0, b0, _j, _0, x0); Two_One_Sum(_j, _0, b1, x3, x2, x1);	
+		}
 		
 		static void Two_Two_Sum(const double* a, const double* b, double* xy) { Two_Two_Sum(a[1], a[0], b[1], b[0], xy[3], xy[2], xy[1], xy[0]); }
 
 		// [x3,x2,x1,x0] = [a1,a0]-[b1,b0]		Calculates the difference between two expansions of length two
-		static void Two_Two_Diff(const double a1, const double a0, const double b1, const double b0, double& x3, double& x2, double& x1, double& x0)
-		 { Two_One_Diff(a1, a0, b0, _j, _0, x0); Two_One_Diff(_j, _0, b1, _u3, x2, x1); x3 = _u3; }
+		static void Two_Two_Diff(const double a1, const double a0, const double b1, const double b0, double& x3, double& x2, double& x1, double& x0) {
+			double _j, _0, _u3;
+			Two_One_Diff(a1, a0, b0, _j, _0, x0); Two_One_Diff(_j, _0, b1, _u3, x2, x1); x3 = _u3; 
+		}
 
 		static void Two_Two_Diff(const double* a, const double* b, double* x) { Two_Two_Diff(a[1], a[0], b[1], b[0], x[3], x[2], x[1], x[0]); }
 
 		// Calculates the second component 'y' of the expansion [x,y] = [a]-[b] when 'x' is known
-		static void Two_Diff_Back(const double a, const double b, double& x, double& y) { _bv = a - x; y = (a - (x + _bv)) + (_bv - b); }
+		static void Two_Diff_Back(const double a, const double b, double& x, double& y) { 
+			double _bv;
+			_bv = a - x; y = (a - (x + _bv)) + (_bv - b); 
+		}
+
 		static void Two_Diff_Back(const double a, const double b, double* xy) { Two_Diff_Back(a, b, xy[1], xy[0]); }
 
 		// [h] = [a1,a0]^2		Squares an expansion of length 2
@@ -310,11 +434,6 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 		// 'h' must be allocated by the caller with eight components.
 		static void Two_Two_Prod(const double a1, const double a0, const double b1, const double b0, double* h);
 		static void Two_Two_Prod(const double* a, const double* b, double* xy) { Two_Two_Prod(a[1], a[0], b[1], b[0], xy); }
-
-		// [h7,h6,...,h0] = [a1,a0]*[b1,b0]		Calculates the product of two expansions of length two.
-		// 'h' must be allocated by the caller with eight components.
-		//void Two_Two_Prod(const double a1, const double a0, const double b1, const double b0, double *h);
-		//inline void Two_Two_Prod(const double *a, const double *b, double *xy) { Two_Two_Prod(a[1], a[0], b[1], b[0], xy); }
 
 		// [e] = -[e]		Inplace inversion
 		static void Gen_Invert(const int elen, double* e) { for (int i = 0; i < elen; i++) e[i] = -e[i]; }
@@ -335,7 +454,7 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 		static int Gen_Diff(const int elen, const double* e, const int flen, const double* f, double* h);
 
 		// Same as above, but 'h' is allocated internally. The caller must still call 'free' to release the memory.
-		static inline int Gen_Diff_With_Alloc(const int elen, const double* e, const int flen, const double* f, double** h)
+		static int Gen_Diff_With_Alloc(const int elen, const double* e, const int flen, const double* f, double** h)
 		{
 			*h = AllocDoubles(elen + flen);
 			return Gen_Diff(elen, e, flen, f, *h);
@@ -343,13 +462,13 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 
 		// [h] = [e] * b		Multiplies an expansion by a scalar
 		// 'h' must be allocated by the caller with at least elen*2 components.
-		static int Gen_Scale(const int elen, const double* e, const double& b, double* h);
+		static int Gen_Scale(const int elen, const double* e, const double b, double* h);
 
 		// [h] = [e] * 2		Multiplies an expansion by 2
 		// 'h' must be allocated by the caller with at least elen components. This is exact up to overflows.
 		static void Double(const int elen, const double* e, double* h) { for (int i = 0; i < elen; i++) h[i] = 2 * e[i]; }
 		
-		// [h] = [e] * 2		Multiplies an expansion by n
+		// [h] = [e] * n		Multiplies an expansion by n
 		// If 'n' is a power of two, the multiplication is exact
 		static void ExactScale(const int elen, double* e, const double n) { for (int i = 0; i < elen; i++) e[i] *= n; }
 
@@ -400,7 +519,7 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 
 	// Preallocates memory for bignaturals having at most 32 limbs.
 	// Larger numbers will use the standard heap.
-	inline MultiPool nfgMemoryPool;
+	inline static thread_local MultiPool nfgMemoryPool;
 
 	// A bignatural is an arbitrarily large non-negative integer.
 	// It is made of a sequence of digits in base 2^32.

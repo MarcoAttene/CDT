@@ -264,6 +264,39 @@ public:
   uint64_t expandCavity(std::vector<uint64_t>& bnd, std::vector<uint32_t>& vertices, uint64_t t, const PLCface& f);
 
   size_t markInnerTets();
+
+  //void getTetsIntersectingFaceSlow(uint32_t fi, std::vector<uint64_t>* i_tets) {
+  //    const PLCface& f = faces[fi];
+
+  //    //
+  //    //// SLOW VERSION - USE TO CHECK
+  //    for (uint32_t v : f.vertices) delmesh.marked_vertex[v] = 1;
+  //    for (size_t i = 0; i < v_orient.size(); i++) v_orient[i] = UNDET_ORIENTATION;
+
+  //    for (size_t i = 0; i < delmesh.numTets(); i++)
+  //        if (tetIntersectsFace(i, f))
+  //            i_tets->push_back(i);
+
+  //    for (size_t i = 0; i < v_orient.size(); i++) v_orient[i] = UNDET_ORIENTATION;
+  //    for (uint32_t v : f.vertices) delmesh.marked_vertex[v] = 0;
+  //    return;
+  //}
+
+  //void saveFaces() const {
+  //    FILE* fp = fopen("faces.off", "w");
+  //    fprintf(fp, "OFF\n%lu %lu 0\n", delmesh.vertices.size(), faces.size());
+  //    for (auto* v : delmesh.vertices) {
+  //        double x, y, z;
+  //        v->getApproxXYZCoordinates(x, y, z);
+  //        fprintf(fp, "%f %f %f\n", x, y, z);
+  //    }
+  //    for (const PLCface& f : faces) {
+  //        fprintf(fp, "%lu ", f.vertices.size());
+  //        for (auto vi : f.vertices) fprintf(fp, "%u ", vi);
+  //        fprintf(fp, "\n");
+  //    }
+  //    fclose(fp);
+  //}
 };
 
 #endif // _PLC_

@@ -195,7 +195,7 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
-	char filename[2048] = "..\\Input_file\\boeing_part.off";
+	char filename[2048] = "..\\Input_file\\bracket.off";
 
 	std::string options = "";
 

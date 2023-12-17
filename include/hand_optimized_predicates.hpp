@@ -25,7 +25,7 @@
 *                                                                           *
 ****************************************************************************/ 
 
-/* Should include incircle and insphere too */
+/* Should include incircle and insphere toexpansionObject:: */
 
 
 #include "implicit_point.h"

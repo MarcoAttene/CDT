@@ -307,11 +307,8 @@ class implicitPoint2D_SSI : public genericPoint{
 	const explicitPoint2D &l1_1, &l1_2, &l2_1, &l2_2;
 
 public:
-	implicitPoint2D_SSI(const explicitPoint2D& l11, const explicitPoint2D& l12, 
-						const explicitPoint2D& l21, const explicitPoint2D& l22)
-		: genericPoint(Point_Type::SSI), l1_1(l11), l1_2(l12), l2_1(l21), l2_2(l22)
-		, dfilter_denominator(NAN)
-	{}
+	implicitPoint2D_SSI(const explicitPoint2D& l11, const explicitPoint2D& l12,
+		const explicitPoint2D& l21, const explicitPoint2D& l22);
 
 	const explicitPoint2D& L1_1() const { return l1_1; }
 	const explicitPoint2D& L1_2() const { return l1_2; }
@@ -363,11 +360,8 @@ class implicitPoint3D_LPI : public genericPoint{
 	const explicitPoint3D &ir, &is, &it; // The plane
 
 public:
-	implicitPoint3D_LPI(const explicitPoint3D& _p, const explicitPoint3D& _q, 
-		const explicitPoint3D& _r, const explicitPoint3D& _s, const explicitPoint3D& _t)
-		: genericPoint(Point_Type::LPI), ip(_p), iq(_q), ir(_r), is(_s), it(_t)
-		, dfilter_denominator(NAN)
-	{}
+	implicitPoint3D_LPI(const explicitPoint3D& _p, const explicitPoint3D& _q,
+		const explicitPoint3D& _r, const explicitPoint3D& _s, const explicitPoint3D& _t);
 
 	const explicitPoint3D& P() const { return ip; }
 	const explicitPoint3D& Q() const { return iq; }
@@ -376,8 +370,7 @@ public:
 	const explicitPoint3D& T() const { return it; }
 
 private: // Cached values
-	mutable interval_number dfilter_lambda_x, dfilter_lambda_y, dfilter_lambda_z, dfilter_denominator;
-	bool needsIntervalLambda() const { return (dfilter_denominator.isNAN()); } // TRUE if NAN
+	interval_number dfilter_lambda_x, dfilter_lambda_y, dfilter_lambda_z, dfilter_denominator;
 
 public:
 	bool getIntervalLambda(interval_number& lx, interval_number& ly, interval_number& lz, interval_number &d) const;
@@ -395,11 +388,8 @@ class implicitPoint3D_TPI : public genericPoint{
 
 public:
 	implicitPoint3D_TPI(const explicitPoint3D& _v1, const explicitPoint3D& _v2, const explicitPoint3D& _v3,
-						const explicitPoint3D& _w1, const explicitPoint3D& _w2, const explicitPoint3D& _w3,
-						const explicitPoint3D& _u1, const explicitPoint3D& _u2, const explicitPoint3D& _u3)
-						: genericPoint(Point_Type::TPI), iv1(_v1), iv2(_v2), iv3(_v3), iw1(_w1), iw2(_w2), iw3(_w3), iu1(_u1), iu2(_u2), iu3(_u3)
-		, dfilter_denominator(NAN)
-	{}
+		const explicitPoint3D& _w1, const explicitPoint3D& _w2, const explicitPoint3D& _w3,
+		const explicitPoint3D& _u1, const explicitPoint3D& _u2, const explicitPoint3D& _u3);
 
 	const explicitPoint3D& V1() const { return iv1; }
 	const explicitPoint3D& V2() const { return iv2; }
@@ -412,8 +402,7 @@ public:
 	const explicitPoint3D& U3() const { return iu3; }
 
 private: // Cached values
-	mutable interval_number dfilter_lambda_x, dfilter_lambda_y, dfilter_lambda_z, dfilter_denominator;
-	bool needsIntervalLambda() const { return (dfilter_denominator.isNAN()); } // TRUE if NAN
+	interval_number dfilter_lambda_x, dfilter_lambda_y, dfilter_lambda_z, dfilter_denominator;
 
 public:
 	bool getIntervalLambda(interval_number& lx, interval_number& ly, interval_number& lz, interval_number &d) const;
@@ -430,18 +419,14 @@ class implicitPoint3D_LNC : public genericPoint {
 
 public:
 	implicitPoint3D_LNC(const explicitPoint3D& _p, const explicitPoint3D& _q,
-		const double _t)
-		: genericPoint(Point_Type::LNC), ip(_p), iq(_q), t(_t)
-		, dfilter_denominator(NAN)
-	{}
+		const double _t);
 
 	const explicitPoint3D& P() const { return ip; }
 	const explicitPoint3D& Q() const { return iq; }
 	const double T() const { return t; }
 
 private: // Cached values
-	mutable interval_number dfilter_lambda_x, dfilter_lambda_y, dfilter_lambda_z, dfilter_denominator;
-	bool needsIntervalLambda() const { return (dfilter_denominator.isNAN()); } // TRUE if NAN
+	interval_number dfilter_lambda_x, dfilter_lambda_y, dfilter_lambda_z, dfilter_denominator;
 
 public:
 	bool getIntervalLambda(interval_number& lx, interval_number& ly, interval_number& lz, interval_number& d) const;

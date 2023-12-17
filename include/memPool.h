@@ -29,6 +29,9 @@
 #define MEMPOOL_H
 
 #include <vector>
+#include <bit>
+#include <bitset>
+#include <cstdint>
 
 // An N_block is a contiguous portion of memory elements.
 // An N_memory_pool stores a set of N_blocks along with
@@ -199,11 +202,15 @@ class MultiPool {
 	std::vector<IN_pool> IN_pools;
 	uint32_t max_block_size;
 
-	// This can be optimized using CLZ or similar instructions...
 	IN_pool& pickPoolFromSize(uint32_t bs) {
-		std::vector<IN_pool>::iterator i = IN_pools.begin();
-		while ((*i).blockSize() < bs) i++;
-		return *i;
+		auto cz = std::countl_zero(bs - 1);
+		cz = (cz == 32) ? (31) : (cz);
+		return IN_pools[31 - cz];
+
+		//// FOR COMPILERS THAT DO NOT SUPPORT C++20 REPLACE THE ABOVE WITH THE FOLLOWING
+		//std::vector<IN_pool>::iterator i = IN_pools.begin();
+		//while ((*i).blockSize() < bs) i++;
+		//return *i;
 	}
 
 public:

@@ -403,14 +403,20 @@ public:
     inline double dist_sq(const vector3d& v) const { return ((*this) - v).sq_length(); }
 
     // TRUE if r is in (or on border of) sphere having p-q as diameter
-    static bool inSmallestSphere(const pointType* p, const pointType* q, const pointType* r) {
-        const vector3d pv(p), qv(q), rv(r);
+    static inline bool inSmallestSphere(const pointType* p, const pointType* q, const pointType* r) {
+        return inSmallestSphere(vector3d(p), vector3d(q), vector3d(r));
+    }
+
+    static inline bool inSmallestSphere(const vector3d& pv, const vector3d& qv, const vector3d& rv) {
         return ((rv - pv).sq_length() + (rv - qv).sq_length()) <= (pv - qv).sq_length();
     }
 
     // TRUE if smallest sphere by p,q,r is larger than smallest sphere by p,q,s
-    static bool hasLargerSphere(const pointType* p, const pointType* q, const pointType* r, const pointType* s) {
-        const vector3d pv(p), qv(q), rv(r), sv(s);
+    static inline bool hasLargerSphere(const pointType* p, const pointType* q, const pointType* r, const pointType* s) {
+        return hasLargerSphere(vector3d(p), vector3d(q), vector3d(r), vector3d(s));
+    }
+    
+    static inline bool hasLargerSphere(const vector3d& pv, const vector3d& qv, const vector3d& rv, const vector3d& sv) {
         const vector3d pms = pv - sv, qms = qv - sv, pmr = pv - rv, qmr = qv - rv;
         const double lens = pms.sq_length() * qms.sq_length();
         if (lens == 0) return true;
