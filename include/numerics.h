@@ -66,8 +66,6 @@ inline void ip_error(const char* msg)
 #define	ISVISUALSTUDIO
 #endif
 
-#ifdef ISVISUALSTUDIO
-
 #ifdef IS64BITPLATFORM
 #ifdef __SSE2__
 #define USE_SIMD_INSTRUCTIONS
@@ -78,12 +76,18 @@ inline void ip_error(const char* msg)
 #endif
 #endif
 
+#ifdef ISVISUALSTUDIO
+
 #pragma fenv_access (on)
 
 inline void setFPUModeToRoundUP() { _controlfp(_RC_UP, _MCW_RC); }
 inline void setFPUModeToRoundNEAR() { _controlfp(_RC_NEAR, _MCW_RC); }
 
 #else
+
+#ifdef __AVX2__
+#pragma GCC target("fma")
+#endif
 
 #pragma STDC FENV_ACCESS ON
 
