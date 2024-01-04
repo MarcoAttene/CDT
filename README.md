@@ -14,15 +14,16 @@ git clone https://github.com/MarcoAttene/CDT
 
 Once done, you may build the executable as follows:
 ```
-mkdir build
-cd build
-cmake ..
+cmake -B build -S .
 ```
 
 This will produce an appropriate building configuration for your system.
 On Windows MSVC, this will produce a cdt.sln file.
 On Linux/MacOS, this will produce a Makefile. 
-Use it as usual to compile cdt.
+Use it as usual to compile cdt. Alternatively, you can you the command line:
+```
+cmake --build build
+```
 
 When compiled, the code generates an executable called ``cdt``.
 Launch it with no command line parameters to have a list of supported options.
