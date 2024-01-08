@@ -20,7 +20,7 @@ cmake -B build -S .
 This will produce an appropriate building configuration for your system.
 On Windows MSVC, this will produce a cdt.sln file.
 On Linux/MacOS, this will produce a Makefile. 
-Use it as usual to compile cdt. Alternatively, you can you the command line:
+Use it as usual to compile cdt. Alternatively, you can use the command line:
 ```
 cmake --build build --config Release
 ```
