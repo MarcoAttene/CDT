@@ -1480,7 +1480,6 @@ bool TetMesh::removeEdge(uint32_t v1, uint32_t v2, double pre_energy) {
 
     if (!succeeds) {
         collapseOnV1(v1, newv, false);
-        resizeTets(num_tets_before);
     }
 
     vertices.pop_back();
