@@ -16,16 +16,17 @@ option(LGPL "LGPL" OFF)
 # set the project name
 project(cdt)
 
-# specify the C++ standard
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-# add the executable
-add_executable(${PROJECT_NAME} 
-    src/giftWrap.cpp
-    src/PLC.cpp
-    src/delaunay.cpp
-    src/main.cpp
+set (SOURCES
+	src/CDT/delaunay.cpp 
+	src/CDT/giftWrap.cpp
+	src/CDT/PLC.cpp
+	src/CDT/main.cpp
+)
+
+add_library(${PROJECT_NAME}_lib
+    ${SOURCES}
 )
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
@@ -67,9 +68,26 @@ else()
 	endif()
 endif()
 
+
+include(gmp)
+
 # Public include directory
-target_include_directories(${PROJECT_NAME} PUBLIC
-	src
-	include
+target_include_directories(${PROJECT_NAME}_lib PUBLIC
+	${CMAKE_CURRENT_SOURCE_DIR}/include
+	${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_link_libraries(${PROJECT_NAME}_lib PUBLIC gmp::gmp)
+target_compile_features(${PROJECT_NAME}_lib PUBLIC cxx_std_20)
+
+add_library(CDT::CDT ALIAS ${PROJECT_NAME}_lib)
+
+
+# add the executable
+get_directory_property(HAS_PARENT PARENT_DIRECTORY)
+if(NOT HAS_PARENT)
+	add_executable(${PROJECT_NAME}
+    	src/CDT/main.cpp
+	)
+	target_link_libraries(${PROJECT_NAME} PUBLIC CDT::CDT)
+endif()
