@@ -91,4 +91,4 @@ if(NOT HAS_PARENT)
 	target_link_libraries(${PROJECT_NAME} PUBLIC CDT::CDT)
 endif()
 
-target_compile_definitions(${PROJECT_NAME}_lib PUBLIC USE_GNU_GMP_CLASSES)
+# target_compile_definitions(${PROJECT_NAME}_lib PUBLIC USE_GNU_GMP_CLASSES)

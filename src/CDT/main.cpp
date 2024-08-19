@@ -13,7 +13,7 @@ using namespace std;
 
 #include "logger.h"
 
-namespace cdt {
+using namespace cdt;
 
 // createSteinerCDT
 //
@@ -192,7 +192,7 @@ bool saveOutputFile(TetMesh &tin, const char *filename, const char *options) {
 }
 
 int main(int argc, char *argv[]) {
-  initFPU();
+  cdt::initFPU();
 
   if (argc < 2) {
     std::cout << "CDT - Create a constrained Delaunay tetrahedrization out of "
@@ -245,5 +245,3 @@ int main(int argc, char *argv[]) {
 
   return 0;
 }
-
-} // namespace cdt
