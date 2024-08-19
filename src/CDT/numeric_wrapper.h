@@ -8,7 +8,7 @@
 // #define USE_LAZY_GMPQ
 // #define USE_PLAIN_GMPQ
 
-#include "implicit_point.h"
+#include <CDT/implicit_point.h>
 
 namespace cdt {
 

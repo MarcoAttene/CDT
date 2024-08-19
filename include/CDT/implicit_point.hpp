@@ -576,7 +576,7 @@ inline int genericPoint::inSphere(const genericPoint &a, const genericPoint &b,
                            e.isExplicit3D();
 
   if (num_explicit == 5)
-    return ::inSphere(
+    return cdt::inSphere(
         a.toExplicit3D().X(), a.toExplicit3D().Y(), a.toExplicit3D().Z(),
         b.toExplicit3D().X(), b.toExplicit3D().Y(), b.toExplicit3D().Z(),
         c.toExplicit3D().X(), c.toExplicit3D().Y(), c.toExplicit3D().Z(),

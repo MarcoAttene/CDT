@@ -22,7 +22,6 @@ set (SOURCES
 	src/CDT/delaunay.cpp 
 	src/CDT/giftWrap.cpp
 	src/CDT/PLC.cpp
-	src/CDT/main.cpp
 )
 
 add_library(${PROJECT_NAME}_lib
@@ -31,40 +30,40 @@ add_library(${PROJECT_NAME}_lib
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
 # optimize for speed
-	target_compile_options(${PROJECT_NAME} PUBLIC /Ot)
+	target_compile_options(${PROJECT_NAME}_lib PUBLIC /Ot)
 # grant IEEE 754 compliance
-	target_compile_options(${PROJECT_NAME} PUBLIC "/fp:strict")
+	target_compile_options(${PROJECT_NAME}_lib PUBLIC "/fp:strict")
 # use intrinsic functions
-	target_compile_options(${PROJECT_NAME} PUBLIC "/Oi")
+	target_compile_options(${PROJECT_NAME}_lib PUBLIC "/Oi")
 # turn off annoying warnings
-	target_compile_options(${PROJECT_NAME} PUBLIC "/D _CRT_SECURE_NO_WARNINGS")
+	target_compile_options(${PROJECT_NAME}_lib PUBLIC "/D _CRT_SECURE_NO_WARNINGS")
 	# set target architecture
 	if(ENABLE_AVX2)
-		target_compile_options(${PROJECT_NAME} PUBLIC "/arch:AVX2")
+		target_compile_options(${PROJECT_NAME}_lib PUBLIC "/arch:AVX2")
 	elseif(ENABLE_SSE2)
-		target_compile_options(${PROJECT_NAME} PUBLIC "/arch:SSE2")
+		target_compile_options(${PROJECT_NAME}_lib PUBLIC "/arch:SSE2")
 	endif()
 # reserve enough stack size
-	target_link_options(${PROJECT_NAME} PUBLIC "/STACK:8421376")
+	target_link_options(${PROJECT_NAME}_lib PUBLIC "/STACK:8421376")
 	if(NOT LGPL)
-		target_compile_options(${PROJECT_NAME} PUBLIC "/D USE_MAROTS_METHOD")
+		target_compile_options(${PROJECT_NAME}_lib PUBLIC "/D USE_MAROTS_METHOD")
 	endif()
 else()
 # set standard optimization level
-	target_compile_options(${PROJECT_NAME} PUBLIC -O2)
+	target_compile_options(${PROJECT_NAME}_lib PUBLIC -O2)
 # grant IEEE 754 compliance
-	target_compile_options(${PROJECT_NAME} PUBLIC -frounding-math)
+	target_compile_options(${PROJECT_NAME}_lib PUBLIC -frounding-math)
 	# set target architecture
 	if(ENABLE_AVX2)
-		target_compile_options(${PROJECT_NAME} PUBLIC "-mavx2")
-                target_compile_options(${PROJECT_NAME} PUBLIC "-mfma")
+		target_compile_options(${PROJECT_NAME}_lib PUBLIC "-mavx2")
+                target_compile_options(${PROJECT_NAME}_lib PUBLIC "-mfma")
 	elseif(ENABLE_SSE2)
-		target_compile_options(${PROJECT_NAME} PUBLIC "-msse2")
+		target_compile_options(${PROJECT_NAME}_lib PUBLIC "-msse2")
 	endif()
 # reserve enough stack size	
-	target_compile_options(${PROJECT_NAME} PUBLIC -Wl,-z,stacksize=8421376)
+	target_compile_options(${PROJECT_NAME}_lib PUBLIC -Wl,-z,stacksize=8421376)
 	if(NOT LGPL)
-		target_compile_options(${PROJECT_NAME} PUBLIC "-DUSE_MAROTS_METHOD")
+		target_compile_options(${PROJECT_NAME}_lib PUBLIC "-DUSE_MAROTS_METHOD")
 	endif()
 endif()
 
@@ -91,3 +90,5 @@ if(NOT HAS_PARENT)
 	)
 	target_link_libraries(${PROJECT_NAME} PUBLIC CDT::CDT)
 endif()
+
+target_compile_definitions(${PROJECT_NAME}_lib PUBLIC USE_GNU_GMP_CLASSES)

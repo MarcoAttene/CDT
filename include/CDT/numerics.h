@@ -35,7 +35,7 @@
 #ifndef NUMERICS_H
 #define NUMERICS_H
 
-#include "memPool.h"
+#include <CDT/memPool.h>
 #include <climits>
 #include <fenv.h>
 #include <float.h>
@@ -48,8 +48,6 @@
 #ifdef USE_GNU_GMP_CLASSES
 #include <gmpxx.h>
 #endif
-
-namespace cdt {
 
 // Call the following function (once per thread) before using these number types
 void initFPU();
@@ -105,6 +103,8 @@ inline void setFPUModeToRoundNEAR() { fesetround(FE_TONEAREST); }
 #endif
 
 #endif
+
+namespace cdt {
 
 /////////////////////////////////////////////////////////////////////
 //
@@ -231,12 +231,13 @@ public:
 
   // int sign() const {
   //	__m128d mp = _mm_cmplt_sd(_mm_shuffle_pd(interval, interval, 1),
-  //zero());
+  // zero());
   //	__m128d rp = _mm_blendv_pd(zero(), _mm_castsi128_pd(_mm_set1_epi32(1)),
-  //mp);
+  // mp);
   //	__m128d m = _mm_cmplt_sd(interval, zero());
   //	__m128i r = _mm_castpd_si128(_mm_blendv_pd(rp,
-  //_mm_castsi128_pd(_mm_set1_epi32(-1)), m)); 	return _mm_cvtsi128_si32(r); } //
+  //_mm_castsi128_pd(_mm_set1_epi32(-1)), m)); 	return _mm_cvtsi128_si32(r); }
+  ////
   // Zero is accounted for
 #else
   int sign() const {
@@ -401,8 +402,8 @@ inline interval_number sqrt(const interval_number &p) {
   const double sup = p.sup();
   if (inf < 0 || sup < 0)
     return interval_number(NAN);
-  const double srinf = sqrt(inf);
-  const double srsup = sqrt(sup);
+  const double srinf = std::sqrt(inf);
+  const double srsup = std::sqrt(sup);
   if (srinf * srinf > inf)
     return interval_number((-nextafter(srinf, 0)), srsup);
   else
@@ -510,8 +511,8 @@ public:
   static void Square(const double a, double &x, double &y);
   static void Square(const double a, double *xy) { Square(a, xy[1], xy[0]); }
 
-  // [x2,x1,x0] = [a1,a0]-[b]		Subtracts an expansion [b] of length one from
-  // an expansion [a1,a0] of length two
+  // [x2,x1,x0] = [a1,a0]-[b]		Subtracts an expansion [b] of length one
+  // from an expansion [a1,a0] of length two
   static void two_One_Diff(const double a1, const double a0, const double b,
                            double &x2, double &x1, double &x0) {
     Two_One_Diff(a1, a0, b, x2, x1, x0);
@@ -521,16 +522,16 @@ public:
     two_One_Diff(a[1], a[0], b, x[2], x[1], x[0]);
   }
 
-  // [x3,x2,x1,x0] = [a1,a0]*[b]		Multiplies an expansion [a1,a0] of length
-  // two by an expansion [b] of length one
+  // [x3,x2,x1,x0] = [a1,a0]*[b]		Multiplies an expansion [a1,a0]
+  // of length two by an expansion [b] of length one
   static void Two_One_Prod(const double a1, const double a0, const double b,
                            double &x3, double &x2, double &x1, double &x0);
   static void Two_One_Prod(const double *a, const double b, double *x) {
     Two_One_Prod(a[1], a[0], b, x[3], x[2], x[1], x[0]);
   }
 
-  // [x3,x2,x1,x0] = [a1,a0]+[b1,b0]		Calculates the sum of two expansions
-  // of length two
+  // [x3,x2,x1,x0] = [a1,a0]+[b1,b0]		Calculates the sum of two
+  // expansions of length two
   static void Two_Two_Sum(const double a1, const double a0, const double b1,
                           const double b0, double &x3, double &x2, double &x1,
                           double &x0) {
@@ -543,8 +544,8 @@ public:
     Two_Two_Sum(a[1], a[0], b[1], b[0], xy[3], xy[2], xy[1], xy[0]);
   }
 
-  // [x3,x2,x1,x0] = [a1,a0]-[b1,b0]		Calculates the difference between two
-  // expansions of length two
+  // [x3,x2,x1,x0] = [a1,a0]-[b1,b0]		Calculates the difference
+  // between two expansions of length two
   static void Two_Two_Diff(const double a1, const double a0, const double b1,
                            const double b0, double &x3, double &x2, double &x1,
                            double &x0) {
@@ -590,9 +591,9 @@ public:
       e[i] = -e[i];
   }
 
-  // [h] = [e] + [f]		Sums two expansions and returns number of components
-  // of result 'h' must be allocated by the caller with at least elen+flen
-  // components.
+  // [h] = [e] + [f]		Sums two expansions and returns number of
+  // components of result 'h' must be allocated by the caller with at least
+  // elen+flen components.
   static int Gen_Sum(const int elen, const double *e, const int flen,
                      const double *f, double *h);
 
