@@ -110,6 +110,73 @@ bool TetMesh::saveTET(const char* filename, bool inner_only) const
 }
 
 
+bool TetMesh::saveVTU(const char* filename, bool inner_only) const
+{
+    ofstream f(filename);
+    if (!f) {
+        std::cerr << "\nTetMesh::saveVTU: Can't open file for writing.\n";
+        return false;
+    }
+
+    f << "<?xml version=\"1.0\"?>\n";
+    f << "<VTKFile type=\"UnstructuredGrid\" version=\"1.0\" byte_order=\"LittleEndian\">\n";
+    f << "  <UnstructuredGrid>\n";
+
+    std::vector<uint32_t> tets_to_save;
+    if (inner_only) {
+        for (uint32_t i = 0; i < numTets(); i++) {
+            if (mark_tetrahedra[i] == DT_IN) {
+                tets_to_save.push_back(i);
+            }
+        }
+    } else {
+        for (uint32_t i = 0; i < numTets(); i++) {
+            if (!isGhost(i)) {
+                tets_to_save.push_back(i);
+            }
+        }
+    }
+    uint32_t num_t = tets_to_save.size();
+    uint32_t num_v = numVertices();
+
+    f << "    <Piece NumberOfPoints=\"" << num_v << "\" NumberOfCells=\"" << num_t << "\">\n";
+    f << "      <Points>\n";
+    f << "        <DataArray type=\"Float64\" Name=\"Points\" NumberOfComponents=\"3\" format=\"ascii\">\n";
+    f << std::setprecision(std::numeric_limits<double>::digits10 + 1);
+    for (uint32_t i = 0; i < num_v; i++) {
+        f << "          " << *vertices[i] << "\n";
+    }
+    f << "        </DataArray>\n";
+    f << "      </Points>\n";
+    f << "      <Cells>\n";
+    f << "        <DataArray type=\"Int64\" Name=\"connectivity\" format=\"ascii\">\n";
+    for (uint32_t i : tets_to_save) {
+        const uint32_t* nodes = tet_node.data() + i * 4;
+        f << "          " << nodes[0] << " " << nodes[1] << " " << nodes[2] << " " << nodes[3] << "\n";
+    }
+    f << "        </DataArray>\n";
+    f << "        <DataArray type=\"Int64\" Name=\"offsets\" format=\"ascii\">\n";
+    f << "          ";
+    for (uint32_t i = 1; i <= num_t; i++) {
+        f << i * 4 << " ";
+    }
+    f << "\n        </DataArray>\n";
+    f << "        <DataArray type=\"UInt8\" Name=\"types\" format=\"ascii\">\n";
+    f << "          ";
+    for (uint32_t i = 0; i < num_t; i++) {
+        f << "10 "; // VTK_TETRA
+    }
+    f << "\n        </DataArray>\n";
+    f << "      </Cells>\n";
+    f << "    </Piece>\n";
+    f << "  </UnstructuredGrid>\n";
+    f << "</VTKFile>\n";
+
+    f.close();
+    return true;
+}
+
+
 bool TetMesh::saveMEDIT(const char* filename, bool inner_only) const
 {
     ofstream f(filename);
