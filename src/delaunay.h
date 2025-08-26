@@ -83,6 +83,9 @@ public:
   // If inner_only is set, only tets tagged as DT_IN are saved
   bool saveTET(const char* filename, bool inner_only = false) const;
 
+  // Save the mesh to a .vtu file (ParaView compatible - XML)
+  bool saveVTU(const char* filename, bool inner_only = false) const;
+
   // Save the mesh to a .mesh file (MEDIT format)
   // If inner_only is set, only tets tagged as DT_IN are saved
   bool saveMEDIT(const char* filename, bool inner_only = false) const;
