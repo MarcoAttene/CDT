@@ -1,5 +1,9 @@
 #include "inputPLC.h"
 
+#include <algorithm>
+#include <cfloat>
+#include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <fstream>
 
