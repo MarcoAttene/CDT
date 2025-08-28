@@ -1,8 +1,6 @@
 #include <iostream>
 #include <fstream>
 
-using namespace std;
-
 class reVertex {
 public:
     double c[3];

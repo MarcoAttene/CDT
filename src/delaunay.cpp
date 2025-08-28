@@ -2,8 +2,6 @@
 #include <float.h>
 #include <iomanip>
 
-using namespace std;
-
 void TetMesh::init_vertices(const double* coords, uint32_t num_v) {
     vertices.reserve(num_v);
     for (uint32_t i = 0; i < num_v; i++)
@@ -74,7 +72,7 @@ void TetMesh::tetrahedrize() {
 
 bool TetMesh::saveTET(const char* filename, bool inner_only) const
 {
-    ofstream f(filename);
+    std::ofstream f(filename);
 
     if (!f) {
         std::cerr << "\nTetMesh::saveTET: Can't open file for writing.\n";
@@ -112,7 +110,7 @@ bool TetMesh::saveTET(const char* filename, bool inner_only) const
 
 bool TetMesh::saveVTU(const char* filename, bool inner_only) const
 {
-    ofstream f(filename);
+    std::ofstream f(filename);
     if (!f) {
         std::cerr << "\nTetMesh::saveVTU: Can't open file for writing.\n";
         return false;
@@ -179,7 +177,7 @@ bool TetMesh::saveVTU(const char* filename, bool inner_only) const
 
 bool TetMesh::saveMEDIT(const char* filename, bool inner_only) const
 {
-    ofstream f(filename);
+    std::ofstream f(filename);
 
     if (!f) {
         std::cerr << "\nTetMesh::saveMEDIT: Can't open file for writing.\n";
@@ -220,7 +218,7 @@ bool TetMesh::saveMEDIT(const char* filename, bool inner_only) const
 
 bool TetMesh::saveBinaryTET(const char* filename, bool inner_only) const
 {
-    ofstream f(filename, ios::binary);
+    std::ofstream f(filename, std::ios::binary);
 
     if (!f) {
         std::cerr << "\nTetMesh::saveBinaryTET: Can't open file for writing.\n";
@@ -266,7 +264,7 @@ bool TetMesh::saveBinaryTET(const char* filename, bool inner_only) const
 }
 
 bool TetMesh::saveBoundaryToOFF(const char* filename) const {
-    ofstream f(filename);
+    std::ofstream f(filename);
 
     if (!f) {
         std::cerr << "\nTetMesh::saveBoundaryToOFF: Can't open file for writing.\n";
@@ -298,7 +296,7 @@ bool TetMesh::saveBoundaryToOFF(const char* filename) const {
 bool TetMesh::saveRationalTET(const char* filename, bool inner_only)
 {
 #ifdef USE_INDIRECT_PREDS
-    ofstream f(filename);
+    std::ofstream f(filename);
 
     if (!f) {
         std::cerr << "\nTetMesh::saveRationalTET: Can't open file for writing.\n";
@@ -1364,7 +1362,7 @@ bool TetMesh::optimizeNearDegenerateTets(bool verbose) {
 bool TetMesh::collapseOnV1(uint32_t v1, uint32_t v2, bool prevent_inversion, double th_energy) {
     if (v1 == INFINITE_VERTEX || v2 == INFINITE_VERTEX) return false;
 
-    vector<uint64_t> vtf1, vtf2, v1nv, v2nv;
+    std::vector<uint64_t> vtf1, vtf2, v1nv, v2nv;
     bool v1_on_boundary = false, v2_on_boundary = false, e_on_boundary = false;
     VTfull(v1, vtf1);
     for (uint64_t t : vtf1) if (isGhost(t)) { v1_on_boundary = true; break; }

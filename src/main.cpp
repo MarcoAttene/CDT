@@ -8,8 +8,6 @@
 #include "inputPLC.h"
 #include "PLC.h"
 
-using namespace std;
-
 #include "logger.h"
 
 // createSteinerCDT
