@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include "implicit_point.h"
 
 class reVertex {
 public:
