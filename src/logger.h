@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cstring>
 
 FILE* log_fp;
 std::chrono::steady_clock::time_point time_point;

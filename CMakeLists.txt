@@ -25,6 +25,7 @@ add_executable(${PROJECT_NAME}
     src/giftWrap.cpp
     src/PLC.cpp
     src/delaunay.cpp
+	src/inputPLC.cpp
     src/main.cpp
 )
 
