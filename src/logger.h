@@ -1,8 +1,8 @@
 #include <chrono>
 #include <cstring>
 
-inline FILE* log_fp;
-inline std::chrono::steady_clock::time_point time_point;
+FILE* log_fp;
+std::chrono::steady_clock::time_point time_point;
 
 inline void startLogging(const char* fn) {
     if (fn != NULL) {
@@ -59,7 +59,7 @@ inline void finishLogging() {
 // To ensure correct resolution of symbols, add Psapi.lib to TARGETLIBS
 // and compile with -DPSAPI_VERSION=1
 
-inline double getPeakMegabytesUsed()
+double getPeakMegabytesUsed()
 {
     HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, GetCurrentProcessId());
     if (NULL == hProcess) return 0;
