@@ -1,7 +1,7 @@
 #ifndef _PLC_
 #define _PLC_
 
-#include "delaunay.h"
+#include "delaunay3d_wrapper.h"
 #include <cstring>
 #include <math.h>
 #include <stdint.h>
@@ -263,8 +263,6 @@ public:
 
   bool recoverFaceHSi(std::vector<uint64_t>& i_tets, const PLCface& f, bool& sisMethodWorks);
 
-
-  void giftWrap(std::vector<uint64_t>& bnd, const std::vector<uint32_t>& vertices, std::vector<uint32_t>& newtets);
   uint64_t missingFaceInCavity(const std::vector<uint64_t>& bnd, const std::vector<uint32_t>& vertices, bool& cavity_invalid);
   uint64_t meshCavity(const std::vector<uint64_t>& bnd, const std::vector<uint32_t>& vertices, std::vector<uint64_t>& base);
   uint64_t expandCavity(std::vector<uint64_t>& bnd, std::vector<uint32_t>& vertices, uint64_t t, const PLCface& f);
@@ -336,5 +334,8 @@ public:
       fclose(fp);
   }
 };
+
+#include "PLC.hpp"
+#include "giftWrap.hpp"
 
 #endif // _PLC_

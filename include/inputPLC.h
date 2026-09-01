@@ -1,5 +1,8 @@
+#pragma once
+
 #include <iostream>
 #include <fstream>
+#include "delaunay3d_wrapper.h"
 
 using namespace std;
 

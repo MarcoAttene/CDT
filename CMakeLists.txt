@@ -46,10 +46,7 @@ project(cdt)
 
 # add the executable
 add_executable(${PROJECT_NAME} 
-    src/giftWrap.cpp
-    src/PLC.cpp
-    src/delaunay.cpp
-    src/main.cpp
+    main.cpp
 )
 
 
@@ -59,6 +56,7 @@ include(FetchContent)
 if(EXISTS ../.local.cmake)
 	set(nfg_SOURCE_DIR "../NFG/")
 	set(indirect_predicates_SOURCE_DIR "../Indirect_Predicates/")
+	set(delaunay3d_SOURCE_DIR "../Delaunay3D/")
 else()
 	FetchContent_Declare(
 		nfg
@@ -72,6 +70,11 @@ else()
 	FetchContent_Populate(Indirect_Predicates)
 	message(STATUS "Indirect_Predicates is available in " ${indirect_predicates_SOURCE_DIR})
 
+	FetchContent_Declare(
+		Delaunay3D
+		URL https://github.com/MarcoAttene/Delaunay3D/archive/refs/heads/master.zip)
+	FetchContent_Populate(Delaunay3D)
+	message(STATUS "Delaunay3D is available in " ${delaunay3d_SOURCE_DIR})
 endif()
 
 if(ENABLE_ARMNEON)
@@ -120,7 +123,8 @@ endif()
 
 # Public include directory
 target_include_directories(${PROJECT_NAME} PUBLIC
-	src
+	include
 	${nfg_SOURCE_DIR}/include
 	${indirect_predicates_SOURCE_DIR}/include
+	${delaunay3d_SOURCE_DIR}/include
 )
