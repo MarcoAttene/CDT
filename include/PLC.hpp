@@ -1048,19 +1048,38 @@ inline void PLCx::getTetsIntersectingFace(uint32_t fi, std::vector<uint64_t> *i_
     // B = empty
     std::vector<uint64_t> B;
 
-    // Mark t0 and insert in B
-    if (t0!=UINT64_MAX) B.push_back(t0);
+    // Mark t0 and insert in B.
+    //
+    // B must hold each tet exactly once. recoverFaceHSi() moves every tet of i_tets -- which is
+    // filled from B at the end of this function -- to the mesh tail by index, updating only the
+    // entry it currently holds a reference to. A second entry naming the same tet still carries the
+    // pre-swap index, which by then belongs to an unrelated tet, so the duplicate drags that
+    // innocent tet into the cavity. Its faces then enter top_faces/bottom_faces, and one of them
+    // lying in the plane of f cannot be classified at all -- such a face is a hull facet of the
+    // cavity's Delaunay, so one side is a ghost that markInnerTets pins to DT_OUT -- which ends with
+    // meshCavity() splicing a ghost into delmesh and a later walk dereferencing INFINITE_VERTEX.
+    //
+    // The stars gathered below overlap: two flat vertices share the tets on the edge between them,
+    // and t0 usually lies in one of them. std::unique only collapses ADJACENT equal elements, so it
+    // let every such repeat through. Mark on insertion instead -- is_marked_Tet_1 is the same flag
+    // the neighbour walk below already uses to avoid revisiting a tet, and it leaves B in the order
+    // the walk expects.
+    //
+    // t0 stays UINT64_MAX when the search above found no tet intersecting the face interior, which
+    // is why both the push and the mark are guarded: mark_tetrahedra[UINT64_MAX] indexes 4 bytes
+    // BEFORE the array (base + 4*(2^64-1) wraps), corrupting the heap and aborting the process on
+    // the next free. Nothing to mark is the correct outcome -- B is empty, the walk below does
+    // nothing, and the face reports no intersecting tets.
+    if (t0 != UINT64_MAX) { B.push_back(t0); delmesh.mark_Tet_1(t0); }
     if (f.flat_vertices.size()) {
-        for (uint32_t v : f.flat_vertices) delmesh.VT(v, B);
-        B.erase(std::unique(B.begin(), B.end()), B.end());
-        for (uint64_t t : B) delmesh.mark_Tet_1(t);
+        std::vector<uint64_t> star;
+        for (uint32_t v : f.flat_vertices) {
+            star.clear();
+            delmesh.VT(v, star);
+            for (uint64_t t : star)
+                if (!delmesh.is_marked_Tet_1(t)) { B.push_back(t); delmesh.mark_Tet_1(t); }
+        }
     }
-    // t0 stays UINT64_MAX when the search above found no tet intersecting the face interior, which is
-    // why the push into B two lines up is guarded. Marking it here was not: mark_tetrahedra[UINT64_MAX]
-    // indexes 4 bytes BEFORE the array (base + 4*(2^64-1) wraps), corrupting the heap and aborting the
-    // process on the next free. Nothing to mark is the correct outcome -- B is empty, the walk below
-    // does nothing, and the face reports no intersecting tets.
-    else if (t0 != UINT64_MAX) delmesh.mark_Tet_1(t0);
 
     // In the remainder, OK means "add n to B, mark it"
     // for each tet t in B
@@ -1364,6 +1383,13 @@ inline bool PLCx::recoverFaceHSi(std::vector<uint64_t>& i_tets, const PLCface& f
  
     // Create vector 'top_faces' and 'bottom_faces'
     std::vector<uint64_t> top_faces, bottom_faces;
+
+    // i_tets must name each tet at most once: the tail swap below rewrites only the entry it is
+    // iterating, so a repeat still holds the pre-swap index and would pull whichever unrelated tet
+    // now sits there into the cavity. getTetsIntersectingFace() guarantees this by marking tets as
+    // it collects them; assert it here, where the guarantee is actually relied upon.
+    assert(std::set<uint64_t>(i_tets.begin(), i_tets.end()).size() == i_tets.size());
+
     for (uint64_t t : i_tets) delmesh.mark_Tet_1(t);
 
     // Move all tets to remove to tail
@@ -1664,6 +1690,23 @@ inline uint64_t PLCx::meshCavity(const std::vector<uint64_t>& bnd, const std::ve
         b.t1 = (remap[b.t1 >> 2] << 2) + (b.t1 & 3);
         b.t2 = (remap[b.t2 >> 2] << 2) + (b.t2 & 3);
     }
+
+    // Every cavity boundary face must have exactly one of its two sides inside the cavity, because
+    // the reconnection below wires delmesh's kept tet to that side. If neither side came out DT_IN
+    // the classification did not separate this cavity, and the reconnection would pick b.t2 anyway
+    // -- a tet the loop above just turned into a ghost and swapped into dt's tail, which the "Delete
+    // mesh tail" truncation further down then removes. delmesh would be left with a neighbour link
+    // to a tet that no longer exists; resize() does not clear the storage, so nothing faults until a
+    // later VT() walks across that link and hands INFINITE_VERTEX to v_orient[].
+    //
+    // Checking here, before a single delmesh array is touched, is what makes the escape safe: the
+    // cavity is abandoned whole rather than half-applied. Reporting it through ip_error() rather
+    // than returning "needs cavity expansion" is deliberate -- recoverFaceHSi() only asserts this
+    // function's return value and ignores it once NDEBUG is set, so a returned code would be
+    // silently dropped, whereas ip_error() ends the operation in every build.
+    for (const bdUpdater& b : bdpairs)
+        if (dt.mark_tetrahedra[b.t1 >> 2] != DT_IN && dt.mark_tetrahedra[b.t2 >> 2] != DT_IN)
+            ip_error("PLCx::meshCavity: a cavity boundary face has no tet inside the cavity.\n");
 
     // Here DT has its own connectivity and all ghosts are in tail.
     // Old i_tets have already been removed from delmesh.
