@@ -1383,6 +1383,13 @@ inline bool PLCx::recoverFaceHSi(std::vector<uint64_t>& i_tets, const PLCface& f
  
     // Create vector 'top_faces' and 'bottom_faces'
     std::vector<uint64_t> top_faces, bottom_faces;
+
+    // i_tets must name each tet at most once: the tail swap below rewrites only the entry it is
+    // iterating, so a repeat still holds the pre-swap index and would pull whichever unrelated tet
+    // now sits there into the cavity. getTetsIntersectingFace() guarantees this by marking tets as
+    // it collects them; assert it here, where the guarantee is actually relied upon.
+    assert(std::set<uint64_t>(i_tets.begin(), i_tets.end()).size() == i_tets.size());
+
     for (uint64_t t : i_tets) delmesh.mark_Tet_1(t);
 
     // Move all tets to remove to tail
@@ -1683,6 +1690,23 @@ inline uint64_t PLCx::meshCavity(const std::vector<uint64_t>& bnd, const std::ve
         b.t1 = (remap[b.t1 >> 2] << 2) + (b.t1 & 3);
         b.t2 = (remap[b.t2 >> 2] << 2) + (b.t2 & 3);
     }
+
+    // Every cavity boundary face must have exactly one of its two sides inside the cavity, because
+    // the reconnection below wires delmesh's kept tet to that side. If neither side came out DT_IN
+    // the classification did not separate this cavity, and the reconnection would pick b.t2 anyway
+    // -- a tet the loop above just turned into a ghost and swapped into dt's tail, which the "Delete
+    // mesh tail" truncation further down then removes. delmesh would be left with a neighbour link
+    // to a tet that no longer exists; resize() does not clear the storage, so nothing faults until a
+    // later VT() walks across that link and hands INFINITE_VERTEX to v_orient[].
+    //
+    // Checking here, before a single delmesh array is touched, is what makes the escape safe: the
+    // cavity is abandoned whole rather than half-applied. Reporting it through ip_error() rather
+    // than returning "needs cavity expansion" is deliberate -- recoverFaceHSi() only asserts this
+    // function's return value and ignores it once NDEBUG is set, so a returned code would be
+    // silently dropped, whereas ip_error() ends the operation in every build.
+    for (const bdUpdater& b : bdpairs)
+        if (dt.mark_tetrahedra[b.t1 >> 2] != DT_IN && dt.mark_tetrahedra[b.t2 >> 2] != DT_IN)
+            ip_error("PLCx::meshCavity: a cavity boundary face has no tet inside the cavity.\n");
 
     // Here DT has its own connectivity and all ghosts are in tail.
     // Old i_tets have already been removed from delmesh.
