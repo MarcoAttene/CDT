@@ -953,7 +953,7 @@ inline void pushAndMark(uint64_t t, TetMesh& m, std::vector<uint64_t>& B) {
 
 // Fill i_tets with tetrahedra that intersect the face 'fi'.
 // If cornerMask is not NULL, mark 'true' mesh triangles that overlap with 'fi'.
-inline void PLCx::getTetsIntersectingFace(uint32_t fi, std::vector<uint64_t> *i_tets, bool mark_overlaps) {
+inline void PLCx::getTetsIntersectingFace(uint32_t fi, std::vector<uint64_t>* i_tets, bool mark_overlaps) {
     const PLCface& f = faces[fi];
 
     // Let e=(v1, v2) be a nonflat edge in f
@@ -964,7 +964,7 @@ inline void PLCx::getTetsIntersectingFace(uint32_t fi, std::vector<uint64_t> *i_
     std::vector<uint64_t> et;
     delmesh.ET(v_t[0], v_t[1], et);
 
-    const uint32_t *tv = input_tv + f.triangles[0] * 3; // Vertices of one face triangle for orientation
+    const uint32_t* tv = input_tv + f.triangles[0] * 3; // Vertices of one face triangle for orientation
 
     // If face has only three vertices, just check whether they are in one tet of the ET
     if (f.vertices.size() == 3 && f.flat_vertices.empty()) {
@@ -1007,7 +1007,7 @@ inline void PLCx::getTetsIntersectingFace(uint32_t fi, std::vector<uint64_t> *i_
     uint64_t t0 = UINT64_MAX;
     for (uint64_t t : et) {
         //    - let v3 and v4 be the vertices of t0 opposite wrt e (oppositeTetEdge)
-        delmesh.oppositeTetEdge(t<<2, v_t, v_t + 2);
+        delmesh.oppositeTetEdge(t << 2, v_t, v_t + 2);
 
         // If we are using this function to mark faces we need three vertices on the plane
         if (mark_overlaps) {
@@ -1048,19 +1048,38 @@ inline void PLCx::getTetsIntersectingFace(uint32_t fi, std::vector<uint64_t> *i_
     // B = empty
     std::vector<uint64_t> B;
 
-    // Mark t0 and insert in B
-    if (t0!=UINT64_MAX) B.push_back(t0);
+    // Mark t0 and insert in B.
+    //
+    // B must hold each tet exactly once. recoverFaceHSi() moves every tet of i_tets -- which is
+    // filled from B at the end of this function -- to the mesh tail by index, updating only the
+    // entry it currently holds a reference to. A second entry naming the same tet still carries the
+    // pre-swap index, which by then belongs to an unrelated tet, so the duplicate drags that
+    // innocent tet into the cavity. Its faces then enter top_faces/bottom_faces, and one of them
+    // lying in the plane of f cannot be classified at all -- such a face is a hull facet of the
+    // cavity's Delaunay, so one side is a ghost that markInnerTets pins to DT_OUT -- which ends with
+    // meshCavity() splicing a ghost into delmesh and a later walk dereferencing INFINITE_VERTEX.
+    //
+    // The stars gathered below overlap: two flat vertices share the tets on the edge between them,
+    // and t0 usually lies in one of them. std::unique only collapses ADJACENT equal elements, so it
+    // let every such repeat through. Mark on insertion instead -- is_marked_Tet_1 is the same flag
+    // the neighbour walk below already uses to avoid revisiting a tet, and it leaves B in the order
+    // the walk expects.
+    //
+    // t0 stays UINT64_MAX when the search above found no tet intersecting the face interior, which
+    // is why both the push and the mark are guarded: mark_tetrahedra[UINT64_MAX] indexes 4 bytes
+    // BEFORE the array (base + 4*(2^64-1) wraps), corrupting the heap and aborting the process on
+    // the next free. Nothing to mark is the correct outcome -- B is empty, the walk below does
+    // nothing, and the face reports no intersecting tets.
+    if (t0 != UINT64_MAX) { B.push_back(t0); delmesh.mark_Tet_1(t0); }
     if (f.flat_vertices.size()) {
-        for (uint32_t v : f.flat_vertices) delmesh.VT(v, B);
-        B.erase(std::unique(B.begin(), B.end()), B.end());
-        for (uint64_t t : B) delmesh.mark_Tet_1(t);
+        std::vector<uint64_t> star;
+        for (uint32_t v : f.flat_vertices) {
+            star.clear();
+            delmesh.VT(v, star);
+            for (uint64_t t : star)
+                if (!delmesh.is_marked_Tet_1(t)) { B.push_back(t); delmesh.mark_Tet_1(t); }
+        }
     }
-    // t0 stays UINT64_MAX when the search above found no tet intersecting the face interior, which is
-    // why the push into B two lines up is guarded. Marking it here was not: mark_tetrahedra[UINT64_MAX]
-    // indexes 4 bytes BEFORE the array (base + 4*(2^64-1) wraps), corrupting the heap and aborting the
-    // process on the next free. Nothing to mark is the correct outcome -- B is empty, the walk below
-    // does nothing, and the face reports no intersecting tets.
-    else if (t0 != UINT64_MAX) delmesh.mark_Tet_1(t0);
 
     // In the remainder, OK means "add n to B, mark it"
     // for each tet t in B
